@@ -890,8 +890,7 @@ function defeat() {
 
 // ---------------- inimigos: dano, morte ----------------
 function inCone(px, py, tx, ty, fa) { let d = Math.abs(Math.atan2(ty - py, tx - px) - fa); if (d > Math.PI) d = Math.PI * 2 - d; return d < Math.PI / 2.2; }
-function hurtEnemy(e, amt, sx, sy, knock) {
-  amt = amt * diffDeal();
+function hurtEnemy0(e, amt, sx, sy, knock) {
   if (e.dead) return; e.hp -= amt;
   if (knock && !EN[e.kind].boss) {
     const dx = e.x - sx, dy = e.y - sy, l = Math.hypot(dx, dy) || 1, nx = e.x + dx / l * knock, ny = e.y + dy / l * knock;
@@ -991,7 +990,7 @@ function worldBlockFn(x, y) {
 }
 
 // ---------------- IA dos inimigos ----------------
-function updateEnemiesAI(dt, list, inWorld) {
+function updateEnemiesAI0(dt, list, inWorld) {
   const c = catData();
   list.forEach((e) => {
     const d = EN[e.kind];
@@ -1197,8 +1196,7 @@ function buildDungeon(rows, themeKey, meta) {
   }
   return dd;
 }
-function enterDungeon(id, trg) {
-  if (id === "ore") { enterOre(trg); return; }
+function enterDungeon0(id, trg) {
   ret = { x: trg.x + trg.w / 2, y: trg.y - 28 };
   if (id === "boss" && Q.bossDown) { toast("A Floresta Sagrada está em paz — a Guardiã foi libertada.", 2500); return; }
   if (id === "cave") { if (!dun.cave) dun.cave = buildDungeon(mapCave(), "cave", { tag: "cave" }); D = dun.cave; }
@@ -1256,6 +1254,7 @@ function updateNPCs(dt) {
   });
 }
 function worldInteract() {
+  if (petTalk()) return;
   if (X.farmIn && famPadNear()) { famExitFarm(); return; }
   const n = nearestOf(W.npcs, P.x, P.y, 62); if (n && dist(P.x, P.y, n.x, n.y) < 62) { talkNPC(n); return; }
   const p = nearestOf(W.props.filter((q) => !q.deco), P.x, P.y, 60); if (p) { searchProp(p); return; }
@@ -1714,7 +1713,7 @@ function npcTalkHook(n) {
   const id = n.id || n.nome; if (typeof famTalk === "function" && famTalk(n)) return true;
   if (X.talkDay[id] !== X.day) { X.talkDay[id] = X.day; X.friend[id] = Math.min(100, (X.friend[id] || 0) + 4); }
   const f = X.friend[id] || 0;
-  if (typeof pqTalk === "function" && pqTalk(n)) return true; if (n.special === "cc" && ccTalk(n)) return true;
+  if (typeof pqTalk === "function" && pqTalk(n)) return true; if (n.special === "cc" && ccTalk(n)) return true; if (n.special === "festa" && festTalk(n)) return true;
   if (n.special === "estaleiro") { openShop("estaleiro"); return true; }
   if (n.special === "felino") { openShop("felino"); return true; }
   if (n.special === "marceneiro") { openShop("marceneiro"); return true; }
@@ -2896,7 +2895,7 @@ function houseInit() {
 }
 function hdim() { const d = HDIM[X.house.lv] || HDIM[1]; HS.cols = d[0]; HS.rows = d[1]; HS.ox = Math.round((VIEW_W - HS.cols * TS) / 2); HS.oy = Math.round((VIEW_H - HS.rows * TS) / 2) + 14; }
 function enterHouse() {
-  houseInit(); hdim(); HS.ret = { x: 510, y: 394 }; scene = "house"; HS.edit = false; P.x = HS.ox + HS.cols * TS / 2; P.y = HS.oy + HS.rows * TS - 22; P.swim = false; P.face = "up"; cat.x = P.x - 26; cat.y = P.y - 6; camera.x = 0; camera.y = 0; effects = []; projectiles = []; hazards = [];
+  houseInit(); hdim(); { const hm = W.obs.find((q) => q.type === "home"); HS.ret = hm && hm.hdoor ? { x: hm.hdoor.x + hm.hdoor.w / 2, y: hm.hdoor.y + 40 } : { x: HOME_SPOT.x, y: HOME_SPOT.y }; } scene = "house"; HS.edit = false; P.x = HS.ox + HS.cols * TS / 2; P.y = HS.oy + HS.rows * TS - 22; P.swim = false; P.face = "up"; cat.x = P.x - 26; cat.y = P.y - 6; camera.x = 0; camera.y = 0; effects = []; projectiles = []; hazards = [];
   toast("🏠 Lar, doce lar! [E] ativa o modo decoração.", 3200); if (typeof storyOnHouse === "function") storyOnHouse();
 }
 function exitHouse() { scene = "world"; HS.edit = false; P.x = HS.ret.x; P.y = HS.ret.y; cat.x = P.x - 20; cat.y = P.y; }
@@ -3591,9 +3590,9 @@ function enemyMeta(B, kind) { const a = B.enemy, alt = { caverna: "bat", ruina: 
 function enterStruct(st) {
   if (!PL) return; const B = BODIES[PL.id], rec = (X.structs = X.structs || {})[st.uid] || (X.structs[st.uid] = {}), cleared = !!rec.cleared;
   const key = "pl_" + structKey(B, st.idx); DTHEME[key] = structTheme(B, st);
-  const rows = genStructMap(st.kind, st, B, cleared); if (!rows) { toast("A entrada está bloqueada por escombros.", 2000); return; }
+  const sdd = hashStr("st|" + st.uid + "|" + wseedOff() + "|" + (cleared ? 1 : 0)), rows = withSeed(sdd, () => genStructMap(st.kind, st, B, cleared)); if (!rows) { toast("A entrada está bloqueada por escombros.", 2000); return; }
   const em = enemyMeta(B, st.kind), meta = { tag: "pl", boss: st.boss || "guardian", em: em };
-  D = buildDungeon(rows, key, meta); D.struct = st; D.id = "struct"; D.guard = .8; ret = { x: st.x + st.w / 2, y: st.y + st.h + 30 }; mineState = null;
+  D = withSeed(sdd + 7, () => buildDungeon(rows, key, meta)); D.skey = "d:" + st.uid + ":" + (cleared ? 1 : 0); D.struct = st; D.id = "struct"; D.guard = .8; ret = { x: st.x + st.w / 2, y: st.y + st.h + 30 }; mineState = null;
   scene = "dungeon"; P.x = D.start.x; P.y = D.start.y; cat.x = P.x - 26; cat.y = P.y; effects = []; projectiles = []; hazards = []; decoy = null; rec.entered = 1;
   toast("🕳️ " + st.nome + (cleared ? " (já explorada)" : "") + " — resolva puzzles com os gatos (C), derrote o guardião e pegue o tesouro!", 4200);
   if (st.lore && STRUCT_LORE[st.lore] && !cleared) { const s = ST(); if (!s.seen["st_" + st.uid]) { s.seen["st_" + st.uid] = 1; setTimeout(() => { if (scene === "dungeon" && D && D.struct === st) startCut([{ bars: 1 }, sy("", STRUCT_LORE[st.lore]), { bars: 0 }]); }, 700); } }
@@ -3706,8 +3705,8 @@ function genChunk(cx, cy) {
   for (let j = 0; j < GC / 16; j++) for (let i = 0; i < GC / 16; i++) {
     const wx = wx0 + i * 16, wy = wy0 + j * 16, h = _vh((wx / 16) | 0, (wy / 16) | 0), h2 = _vh(((wx / 16) | 0) + 77, ((wy / 16) | 0) + 31), b = biomeAt(wx + 8, wy + 8), x = i * 16 + 2 + h2 * 10, y = j * 16 + 2 + h * 10;
     if (b === "ocean") continue;
-    if (b === "farm" || b === "forest") {
-      if (h < .22) { g.strokeStyle = b === "farm" ? "rgba(60,110,40,.55)" : "rgba(30,50,25,.5)"; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x - 2, y); g.moveTo(x, y + 4); g.lineTo(x, y - 1); g.moveTo(x, y + 4); g.lineTo(x + 2, y); g.stroke(); }
+    if (b === "farm" || b === "forest" || b === "village") {
+      if (h < .22) { g.strokeStyle = b !== "forest" ? "rgba(60,110,40,.55)" : "rgba(30,50,25,.5)"; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x - 2, y); g.moveTo(x, y + 4); g.lineTo(x, y - 1); g.moveTo(x, y + 4); g.lineTo(x + 2, y); g.stroke(); }
       else if (h > .96) { g.fillStyle = ["#ffe066", "#ff9ec7", "#fff", "#b5a1ff"][(h2 * 4) | 0]; g.fillRect(x, y, 2, 2); g.fillStyle = "rgba(255,255,255,.4)"; g.fillRect(x + .5, y - 1, 1, 1); }
       else if (b === "forest" && h > .9) { g.fillStyle = "rgba(20,30,15,.28)"; g.beginPath(); g.ellipse(x, y, 5, 3, 0, 0, 6.283); g.fill(); }
     } else if (b === "village") { if (h < .15) { g.fillStyle = "rgba(90,60,30,.25)"; g.fillRect(x, y, 3, 2); } else if (h > .94) { g.fillStyle = "rgba(255,240,200,.3)"; g.beginPath(); g.ellipse(x, y, 3, 2, 0, 0, 6.283); g.fill(); } }
@@ -3980,7 +3979,7 @@ function drawPlayerAt(x, y) {
   drawCritter(ctx, x, y, diagFace(m, P.face), { main: P.tint || P.cls.main, dark: P.cls.dark }, 3.1, o);
   if (P.swim && P.gear.mask) { ctx.fillStyle = "rgba(160,220,255,.9)"; ctx.fillRect(x - 5, y - 24, 10, 4); }
 }
-function drawCatAt(x, y) { const c = CATS[cat.breed], m = trackMove(cat); drawCritter(ctx, x, y, diagFace(m, cat.face), { main: c.main, dark: c.dark }, 2.2, { mv: m.mv, ph: m.ph, seed: 2 }); }
+function drawCatAt0(x, y) { const c = CATS[cat.breed], m = trackMove(cat); drawCritter(ctx, x, y, diagFace(m, cat.face), { main: c.main, dark: c.dark }, 2.2, { mv: m.mv, ph: m.ph, seed: 2 }); }
 
 // ============================================================
 // pv19: Família (casamento, bebê Pinscher/Gato/Híbrido), Fazenda Orbital, extras do modo teste
@@ -4265,7 +4264,7 @@ function dcLink(dc, pc) { const L = { kind: "rtc", pid: null, open: dc.readyStat
 function peerLink(conn) { const L = { kind: "peerjs", pid: null, open: conn.open, send(o) { try { if (conn.open) conn.send(JSON.stringify(o)); } catch (e) { } }, close() { try { conn.close(); } catch (e) { } }, onmsg: null, onclose: null, onopen: null };
   conn.on("open", () => { L.open = true; L.onopen && L.onopen(); }); conn.on("data", (d) => { try { L.onmsg && L.onmsg(typeof d === "string" ? JSON.parse(d) : d); } catch (x) { } }); conn.on("close", () => { L.open = false; L.onclose && L.onclose(); }); conn.on("error", () => { }); return L; }
 // ---------- estado local ----------
-function locKey() { if (X.farmIn) return "f" + MP.id; if (scene === "world" || scene === "launch") return "w"; if (scene === "planet" && PL) return "p:" + PL.id; if (scene === "space") return "s:" + X.sys; return "x"; }
+function locKey() { if (X.farmIn) return "f" + MP.id; if (scene === "dungeon" && D && D.skey) return D.skey; if (scene === "world" || scene === "launch") return "w"; if (scene === "planet" && PL) return "p:" + PL.id; if (scene === "space") return "s:" + X.sys; return "x"; }
 function selfState() {
   const sp = scene === "space" && SPC, hat = P.equipped && P.equipped.head ? (P.inventory.find((i) => i.id === P.equipped.head) || {}).color : null, col = P.equipped && P.equipped.body ? (P.inventory.find((i) => i.id === P.equipped.body) || {}).color : null;
   return { t: "p", id: MP.id, nm: mpName(), k: locKey(), sys: X.sys, x: Math.round(sp ? SPC.x : P.x), y: Math.round(sp ? SPC.y : P.y), f: P.face, m: P.tint || (P.cls && P.cls.main), d: P.cls && P.cls.dark, h: hat, c: col, a: sp ? Math.round(SPC.a * 100) / 100 : 0, mv: !!P.moving };
@@ -4294,6 +4293,7 @@ function mpHostAccept(link, m) {
   mpToast("🌐 " + MP.players[link.pid].nm + " entrou na sala!", 3000); mpPushState(true);
 }
 function mpHandle(m) {
+  if (mpSyncHandle(m)) return;
   const from = m.from; if (m.t === "p") { let r = MP.players[from]; if (!r) { if (!from || from === MP.id) return; r = MP.players[from] = { id: from, nm: m.nm, x: m.x, y: m.y, tx: m.x, ty: m.y }; } const fk = r.k; Object.assign(r, { nm: String(m.nm || r.nm).slice(0, 14), k: m.k, sys: m.sys, f: m.f, m: m.m, d: m.d, h: m.h, c: m.c, a: m.a, tx: m.x, ty: m.y, mv: m.mv, seen: Date.now() }); if (fk !== m.k || Math.hypot(r.x - r.tx, r.y - r.ty) > 400 || r.x == null) { r.x = m.x; r.y = m.y; } return; }
   if (m.t === "wel") { MP.leader = m.leader || m.id; mpAdoptWorld(m); MP.players[m.id] = MP.players[m.id] || { id: m.id, nm: m.nm, k: m.k, x: 0, y: 0, tx: 0, ty: 0, f: "down" }; (m.players || []).forEach((q) => { MP.players[q.id] = MP.players[q.id] || { id: q.id, nm: q.nm, k: "x", x: 0, y: 0, tx: 0, ty: 0, f: "down" }; }); MP.status = "Conectado"; MP.on = true; MP.links.host.pid = m.id; mpToast("🌐 Conectado à sala de " + m.nm + "!", 3200); return; }
   if (m.t === "full") { mpToast("Sala cheia (máx. " + MP_MAX + " jogadores).", 3500); mpLeave(true); return; }
@@ -4359,7 +4359,7 @@ function mpLeaderState() { return MP.players[MP.leader] || null; }
 function mpNearPad() { const K = ISLES[2]; return dist(P.x, P.y, K.x + 60, K.y + 30) < 700; }
 function mpFollowStep() {
   if (!MP.on || mpIsLeader() || !MP.follow) { MP.crew = false; return; } const L = mpLeaderState(); if (!L || !L.k) { MP.crew = false; return; } if (ui !== null && ui !== "x") return;
-  const lk = L.k; if (L.sys && SYSTEMS[L.sys] && lk[0] !== "w" && lk[0] !== "x" && lk[0] !== "f" && X.sys !== L.sys && scene !== "space") { X.sys = L.sys; X.sysVisited[L.sys] = 1; syncSys(); }
+  const lk = L.k; if (lk[0] === "d" || lk[0] === "g") { MP.crew = false; return; } if (L.sys && SYSTEMS[L.sys] && lk[0] !== "w" && lk[0] !== "x" && lk[0] !== "f" && X.sys !== L.sys && scene !== "space") { X.sys = L.sys; X.sysVisited[L.sys] = 1; syncSys(); }
   if (lk[0] === "s") { const sys = lk.slice(2);
     if (scene === "space") { if (X.sys !== sys) setSystem(sys, true); MP.crew = true; }
     else if (scene === "planet" || (scene === "world" && !X.farmIn && mpNearPad())) { mpEmbark(); }
@@ -4419,7 +4419,7 @@ function mpInit() {
   window.addEventListener("keydown", (e) => { if (e.code === "KeyT" && started && ui === null && MP.on && !e.repeat && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || "")) { e.preventDefault(); let t = null; try { t = window.prompt("💬 Mensagem para a sala:"); } catch (x) { } if (t) mpSendChat(t); } });
 }
 function mpBadge() { const b = document.getElementById("mpBadge"); if (!b) return; b.style.display = MP.on && started ? "block" : "none"; if (MP.on) b.textContent = "🌐 " + mpCount() + "/" + MP_MAX + (mpIsLeader() ? " 👑" : MP.crew ? " 🚀" : "") + (MP.room ? " · sala " + MP.room : ""); }
-function mpLocText(r) { const k = r.k || "x"; return k === "w" ? "🏝️ Ilha" : k[0] === "p" ? "🪐 " + (BODIES[k.slice(2)] ? BODIES[k.slice(2)].nome : "planeta") : k[0] === "s" ? "🚀 Espaço" : k[0] === "f" ? "🏡 Fazenda" : "🏠 Dentro de um local"; }
+function mpLocText(r) { const k = r.k || "x"; return k === "w" ? "🏝️ Ilha" : k[0] === "p" ? "🪐 " + (BODIES[k.slice(2)] ? BODIES[k.slice(2)].nome : "planeta") : k[0] === "s" ? "🚀 Espaço" : k[0] === "f" ? "🏡 Fazenda" : (k[0] === "d" || k[0] === "g") ? "🕳️ Estrutura/masmorra" : "🏠 Dentro de um local"; }
 function tabOnline() {
   let s = "<p class='mini'>Jogue com até 3 amigos (4 jogadores). Cada um mantém o próprio save; vocês se veem no mundo, conversam e <b>viajam juntos no mesmo foguete</b>. Funciona direto do GitHub Pages, sem servidor próprio.</p>";
   s += "<div class='mpbox'><div class='mprow'><b>Seu nome:</b> <input type='text' data-mp='name' maxlength='14' value='" + esc(mpName()) + "'>" + B_("setName", "", "Salvar nome") + "</div></div>";
@@ -4928,7 +4928,7 @@ function buildVillage2(Wd) {
   // juncos nas margens
   RIVERS[0].pts.forEach((p, i) => { if (!i) return; const a = RIVERS[0].pts[i - 1], n = 3; for (let k = 0; k < n; k++) { const t = (k + .5) / n, x = a[0] + (p[0] - a[0]) * t, y = a[1] + (p[1] - a[1]) * t, side = (i + k) % 2 ? 1 : -1; const bx = x + side * 40, by = y; if (!onBridge(bx, by) && !riverAt(bx, by)) O(bx - 9, by - 8, 18, 22, "reeds", { nosolid: true }); } });
   O(380, 900, 170, 118, "mineentry", { nosolid: false }); W_TRIG_ORE(Wd); O(600, 1060, 60, 40, "mineboard", { nosolid: true });
-  // moradores ao ar livre
+  // moradores ao ar livre (a limpeza de layout roda no fim)
   Wd.npcs.push(
     NPC_BASE("marceneiro", "Marceneiro Cepo", 1800, 975, "#9a6a3a", "#5a3a1a", "#e8b84b", ["Móveis, baús e ampliações! Sua casa merece conforto.", "Uma cama boa vale mais que mil petiscos."], { hat: "#d9c48a", special: "marceneiro", lines2: ["Faço a madeira cantar. E o preço, também."] }),
     NPC_BASE("anciao", "Anciã Contadora", 1560, 600, "#bfb8a8", "#7a7466", "#8a5ac9", ["Sente-se, pequeno. Há histórias mais velhas que o Osso.", "Cada estrela é um latido do Grande Cão."], { hat: "#8a5ac9", special: "lore", lines2: ["Você carrega o olhar da sua avó."] }),
@@ -4940,6 +4940,7 @@ function buildVillage2(Wd) {
     NPC_BASE("crianca2", "Filhote Pipoca", 1580, 540, "#e0d0b0", "#8a7a5a", "#3fa6d6", ["Eu vi um peixe saltar na lagoa e piscar para mim!", "Meu pai diz que o céu é um quintal grande demais."], { scale: 2.1, r: 70 }),
     NPC_BASE("guarda_mina", "Chefe de Mina Pedra-Dura", 620, 1030, "#8a7a6a", "#4a3a2a", "#e8b84b", ["A Mina do Pedregulho está aberta a quem tiver coragem e um bom par de patas.", "Aqui embaixo não tem monstro: só pedra, minério e o eco do seu próprio latido."], { special: "chefe_mina", hat: "#e8b84b", r: 24 }),
   );
+  villageFix(Wd);
 }
 
 function W_TRIG_ORE(Wd) { Wd.trig.push({ x: 430, y: 1020, w: 70, h: 30, kind: "dungeon", id: "ore" }); }
@@ -5067,7 +5068,7 @@ function drawTile(c, sx, sy, th, tx, ty) {
   drawTile0(c, sx, sy, th, tx, ty);
 }
 function renderDungeon() {
-  renderDungeon0(); if (!(D && D.ore)) return; const g = ctx, M = MN();
+  renderDungeon0(); mpDrawDungeon(); if (!(D && D.ore)) return; const g = ctx, M = MN();
   OFX.forEach((q) => { g.globalAlpha = Math.min(1, q.t * 3); g.fillStyle = q.c; g.fillRect(q.x - camera.x, q.y - camera.y, 3, 3); }); g.globalAlpha = 1;
   const px = P.x - camera.x, py = P.y - camera.y, rad = Math.max(150, 300 - D.floor * 4), gr = g.createRadialGradient(px, py, rad * .3, px, py, rad); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(0,0,0," + Math.min(.82, .35 + D.floor * .012).toFixed(2) + ")"); g.fillStyle = gr; g.fillRect(0, 0, VIEW_W, VIEW_H);
   const fl = .06 * Math.sin(Date.now() / 120); g.fillStyle = "rgba(255,190,90," + (.05 + fl).toFixed(3) + ")"; g.beginPath(); g.arc(px, py, 70, 0, 6.283); g.fill();
@@ -5311,7 +5312,8 @@ function buildCC(Wd) {
   Wd.npcs.push(mkNPC({ id: "cookie", nome: "Cookie", x: hx + 60, y: hy + 20, main: "#1d1a1b", dark: "#0c0a0b", collar: "#3fa6d6", tan: 1, special: "cc", scale: 2.4, r: 90, lines: ["Ouvi algo no vento..."] }));
 }
 function npcExtras(n, x, y, face, s) {
-  npcExtras0(n, x, y, face, s); if (!n.tan) return;
+  npcExtras0(n, x, y, face, s); if (n.actIc && n.sched) { const g0 = ctx; g0.save(); g0.font = "13px system-ui"; g0.textAlign = "center"; g0.fillText(n.actIc, x + 14, y - 11 * s - 6); g0.restore(); }
+  if (!n.tan) return;
   const g = ctx, bw = 9 * s, bh = 6 * s, hh = 5 * s, by = Math.round(y - bh - s), hy = Math.round(by - hh + 2 * s); g.save(); g.fillStyle = "#d7a566";
   if (face !== "up") { g.fillRect(Math.round(x - 2.6 * s), Math.round(hy + .4 * s), Math.round(1.1 * s), Math.round(.9 * s)); g.fillRect(Math.round(x + 1.5 * s), Math.round(hy + .4 * s), Math.round(1.1 * s), Math.round(.9 * s)); g.fillRect(Math.round(x - 1.2 * s), Math.round(hy + 3.2 * s), Math.round(2.4 * s), Math.round(1.1 * s)); }
   g.fillRect(Math.round(x - 1.3 * s), Math.round(by + .2 * s), Math.round(2.6 * s), Math.round(1.4 * s));
@@ -5357,6 +5359,372 @@ function ccTick() {
 }
 function questInit() { setInterval(() => { try { pqTick(); ccTick(); } catch (e) { } }, 900); if (window.PV) Object.assign(window.PV, { PQD, PQ_, CC, ccMeet, pqTalk, pqFixNear, pqDoFix, genPlanet, mineStoryCheck }); }
 
+// ============================================================
+// pv30: ROTINAS DA VILA, PETS SEGUIDORES (Cake & Cookie), FESTIVAL DA PRAÇA, PESCA NO RIO
+// ============================================================
+const PLAZA = { x: 1650, y: 600 }, TAVERNA = { x: 2090, y: 880 }, DOCA = { x: 560, y: 830 };
+// id -> [emoji trabalho, emoji meio-dia, emoji noite, ponto da noite]
+const ROUT = {
+  ferreiro: ["🔨", "💬", "🍻", TAVERNA], fruteira: ["🍎", "💬", "🍻", TAVERNA], lavadeira: ["🧺", "☕", "🌙", null], bardo: ["🎵", "🎶", "🎸", TAVERNA],
+  anciao: ["📖", "♟️", "🌙", null], marceneiro: ["🪚", "💬", "🍻", TAVERNA], guardiao: ["🛡️", "👀", "🛡️", null], crianca1: ["🎒", "⚽", "🌙", null],
+  crianca2: ["🎒", "⚽", "🌙", null], filhote: ["🐾", "⚽", "🌙", null], pescador: ["🎣", "🎣", "🍻", TAVERNA], guarda_ponte: ["🌉", "👀", "🍻", TAVERNA],
+};
+function routinesInit() {
+  if (!W || !W.npcs) return;
+  W.npcs.forEach((n, i) => {
+    const R = ROUT[n.id]; if (!R || n._rt) return; n._rt = 1; const hx0 = n.hx, hy0 = n.hy, off = ((i * 37) % 120) - 60, work = n.id === "pescador" ? DOCA : { x: hx0, y: hy0 };
+    const mid = { x: PLAZA.x + off, y: PLAZA.y + ((i * 53) % 100) - 20 }, nit = R[3] ? { x: R[3].x + off * .5, y: R[3].y + 30 } : { x: hx0, y: hy0 };
+    n.schedN = [{ a: 0, b: .3, x: work.x, y: work.y, ic: R[0] }, { a: .3, b: .5, x: mid.x, y: mid.y, ic: R[1] }, { a: .5, b: .75, x: nit.x, y: nit.y, ic: R[2] }, { a: .75, b: 1.01, x: hx0, y: hy0, ic: "💤" }];
+    n.schedF = [{ a: 0, b: .25, x: hx0, y: hy0, ic: "🎪" }, { a: .25, b: .72, x: PLAZA.x + off * 1.3, y: PLAZA.y + ((i * 29) % 140) - 40, ic: "🎉" }, { a: .72, b: 1.01, x: hx0, y: hy0, ic: "💤" }];
+    n.sched = n.schedN; n.r = Math.min(n.r || 36, 40);
+  });
+}
+function routinesTick() {
+  if (!W || !W.npcs) return; const f = isFestival();
+  W.npcs.forEach((n) => { if (!n._rt) return; const want = f ? n.schedF : n.schedN; if (n.sched !== want) n.sched = want; const s = n.sched && schedPos(n); n.actIc = s ? s.ic : null; });
+}
+// ---------- pets seguidores ----------
+const FOL = { hist: [], list: [], t: 0 };
+function folInit() {
+  FOL.list = [["cake", "Cake", "#c9455a", 10], ["cookie", "Cookie", "#3fa6d6", 20]].map((d) => ({ id: d[0], nome: d[1], x: 0, y: 0, main: "#1d1a1b", dark: "#0c0a0b", collar: d[2], tan: 1, scale: 2.0, lag: d[3], face: "down", pT: 0, li: 0, init: 0 }));
+}
+function folStep() {
+  const now = Date.now(); if (now - FOL.t < 55) return; FOL.t = now; FOL.hist.push([P.x, P.y]); if (FOL.hist.length > 80) FOL.hist.shift();
+  const last = FOL.hist[FOL.hist.length - 2]; if (last && Math.hypot(P.x - last[0], P.y - last[1]) > 300) FOL.hist = [[P.x, P.y]];
+  FOL.list.forEach((f) => { const h = FOL.hist[Math.max(0, FOL.hist.length - 1 - f.lag)] || [P.x, P.y]; const tx = h[0] + (f.id === "cake" ? -18 : 18), ty = h[1] + 14; if (!f.init || Math.hypot(tx - f.x, ty - f.y) > 400) { f.x = tx; f.y = ty; f.init = 1; } const dx = tx - f.x, dy = ty - f.y; f.x += dx * .35; f.y += dy * .35; if (Math.abs(dx) + Math.abs(dy) > 2) f.face = faceOf(dx, dy, f.face); });
+}
+function folActive() { try { return started && CC().met && (scene === "world" || scene === "planet" || scene === "dungeon"); } catch (e) { return false; } }
+function drawCatAt(x, y) {
+  drawCatAt0(x, y); if (!folActive()) return; folStep();
+  FOL.list.forEach((f) => { drawNPC(f, x + (f.x - cat.x), y + (f.y - cat.y)); });
+}
+function petNear() { if (!folActive()) return null; let b = null, bd = 56; FOL.list.forEach((f) => { const d = Math.hypot(P.x - f.x, P.y - f.y); if (d < bd) { bd = d; b = f; } }); return b; }
+function petTalk() {
+  if (scene === "dungeon" && D && D.ore) return false; const f = petNear(); if (!f) return false;
+  if (!X.friend[f.id]) X.friend[f.id] = 10; ccTalk(f); if (X.talkDay[f.id] !== X.day) { X.talkDay[f.id] = X.day; X.friend[f.id] = Math.min(100, (X.friend[f.id] || 0) + 4); } return true;
+}
+// ---------- festival da praça ----------
+Object.assign(NEWOBS, {
+  festbanner(g, o, sx, sy) {
+    if (!isFestival()) return; const t = Date.now() / 1000, cs = ["#ff5c8a", "#ffd84a", "#6bd0ff", "#8dff6b", "#c58bff"];
+    g.save(); g.strokeStyle = "#5a3a1a"; g.lineWidth = 3; g.beginPath(); g.moveTo(sx, sy + o.h); g.lineTo(sx, sy - 40); g.moveTo(sx + o.w, sy + o.h); g.lineTo(sx + o.w, sy - 40); g.stroke();
+    g.strokeStyle = "#3a2410"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(sx, sy - 40); g.quadraticCurveTo(sx + o.w / 2, sy - 10 + Math.sin(t * 2) * 3, sx + o.w, sy - 40); g.stroke();
+    for (let i = 1; i < 14; i++) { const k = i / 14, px = sx + o.w * k, py = sy - 40 + 4 * Math.sin(Math.PI * k) * 7 + 18 * Math.sin(Math.PI * k) + Math.sin(t * 2 + i) * 1.5; g.fillStyle = cs[i % 5]; g.beginPath(); g.moveTo(px - 7, py); g.lineTo(px + 7, py); g.lineTo(px, py + 15); g.closePath(); g.fill(); }
+    [0, 1].forEach((e) => { const lx = sx + e * o.w, ly = sy - 46; g.fillStyle = "rgba(255,210,120,.35)"; g.beginPath(); g.arc(lx, ly, 14 + Math.sin(t * 3 + e) * 2, 0, 6.283); g.fill(); g.fillStyle = "#ffcf5a"; g.beginPath(); g.arc(lx, ly, 6, 0, 6.283); g.fill(); });
+    g.restore();
+  },
+});
+function festInit() {
+  if (!W || W._fest) return; W._fest = 1;
+  W.obs.push({ x: PLAZA.x - 180, y: PLAZA.y - 130, w: 360, h: 20, type: "festbanner", nosolid: true });
+  W.obs.push({ x: PLAZA.x - 180, y: PLAZA.y + 160, w: 360, h: 20, type: "festbanner", nosolid: true });
+}
+function festTick() {
+  if (!started || !W || !W.npcs) return; const f = isFestival(), tt = dayT / 200, on = f && tt >= .2 && tt < .75;
+  if (!X.fest || X.fest.day !== X.day) X.fest = { day: X.day, f0: X.fishCaught || 0, claimed: 0, banq: 0 };
+  let mc = W.npcs.find((n) => n.id === "mc_festa");
+  if (on && !mc) { W.npcs.push(mkNPC({ id: "mc_festa", nome: "Mestre de Cerimônias Tambor", x: PLAZA.x, y: PLAZA.y + 40, main: "#c9455a", dark: "#7a2a38", collar: "#ffd84a", hat: "#ffd84a", special: "festa", r: 30, scale: 2.8, lines: ["Bem-vindos ao Festival!"] })); }
+  if (!on && mc) W.npcs = W.npcs.filter((n) => n.id !== "mc_festa");
+}
+function festTalk(n) {
+  const F = X.fest, fish = (X.fishCaught || 0) - F.f0, tiers = [[3, "🥉 Bronze", { ouro: 150 }], [6, "🥈 Prata", { ouro: 300, fragmento: 1 }], [10, "🥇 Ouro", { ouro: 600, fragmento: 3 }]];
+  const got = tiers.filter((t) => fish >= t[0]); const best = got.length ? got[got.length - 1] : null;
+  const opt = [];
+  if (best && F.claimed < got.length) { for (let i = F.claimed; i < got.length; i++) giveRewardLite(got[i][2]); F.claimed = got.length; toast("🏆 Concurso de Pesca — " + best[1] + "! " + fish + " peixes. " + rewardText(best[2]), 6000); return true; }
+  if (rs("comida") >= 3 && !F.banq) { radd("comida", -3); F.banq = 1; Object.keys(X.friend || {}).forEach((k) => { X.friend[k] = Math.min(100, (X.friend[k] || 0) + 2); }); giveRewardLite({ ouro: 120 }); toast("🍲 Banquete da Praça! Você doou 3 🍖: todos ganharam ♥+2 e você, 120 🪙.", 5500); return true; }
+  const nx = tiers.find((t) => fish < t[0]);
+  toast(n.nome + ": “Concurso de Pesca! Pesque nos rios/lagoa/doca — você já pegou " + fish + " peixes hoje" + (nx ? " (próximo prêmio: " + nx[0] + " — " + nx[1] + ")" : "") + ". Traga 3 🍖 para o Banquete!”", 6500); return true;
+}
+// ---------- pesca no rio ----------
+function riverFishInit() {
+  if (!W || !W.fish || W._rf) return; W._rf = 1; let n = 0;
+  RIVERS.forEach((r) => { for (let i = 0; i < r.pts.length - 1; i++) { const a = r.pts[i], b = r.pts[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]), nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (m[1] < 100) continue; for (const s of [1, -1]) { const d = r.w / 2 + 38, x = m[0] + nx * d * s, y = m[1] + ny * d * s; if (!blockedWorldX(x, y, 18, 18) && !W.fish.some((q) => Math.hypot(q.x - x, q.y - y) < 250)) { W.fish.push({ x, y, kind: "coast" }); n++; break; } } } });
+}
+function lifeInit() {
+  folInit();
+  setInterval(() => { try { festInit(); riverFishInit(); routinesInit(); routinesTick(); festTick(); } catch (e) { } }, 1000);
+  if (window.PV) Object.assign(window.PV, { lyPlaceHouses, lyBuildRoads, lyClean, lyFixPeople, lyPlantTrees, villageFix, routinesTick, FOL, petNear, petTalk, festTalk, ROUT, isFest: () => isFestival() });
+}
+
+// ============================================================
+// pv31: LAYOUT DA VILA — resolve conflitos (casas x água), gera caminhos por A*
+// (só atravessam o rio nas pontes), limpa árvores do layout antigo e planta outras.
+// Tudo em funções/var: roda durante a geração do mundo (antes dos const do arquivo).
+// ============================================================
+var LY = { x0: 220, y0: 0, x1: 2520, y1: 1330, cell: 24 };
+function lyOK() { return typeof riverAt === "function" && typeof RIVERS !== "undefined" && RIVERS && typeof BRIDGES !== "undefined" && BRIDGES; }
+function lyWet(x, y) { try { return lyOK() ? !!riverAt(x, y) : false; } catch (e) { return false; } }
+function lyInV(x, y) { return x > LY.x0 && x < LY.x1 && y > LY.y0 && y < LY.y1; }
+function lyNearBridge(x, y, m) { for (let i = 0; i < BRIDGES.length; i++) { const b = BRIDGES[i]; if (x > b.x - m && x < b.x + b.w + m && y > b.y - m && y < b.y + b.h + m) return true; } return false; }
+function lyWetM(x, y, m) { if (lyWet(x, y)) return true; const d = [[m, 0], [-m, 0], [0, m], [0, -m], [m * .7, m * .7], [-m * .7, m * .7], [m * .7, -m * .7], [-m * .7, -m * .7]]; for (let i = 0; i < d.length; i++) if (lyWet(x + d[i][0], y + d[i][1])) return true; return false; }
+function lySolidObs(Wd, skip) { return Wd.obs.filter((o) => o !== skip && !o.nosolid && o.type !== "bridge"); }
+function lyHit(list, x, y, m) { for (let i = 0; i < list.length; i++) { const o = list[i]; if (x > o.x - m && x < o.x + o.w + m && y > o.y - m && y < o.y + o.h + m) return o; } return null; }
+function lyRectWet(x, y, w, h, m) { for (let i = 0; i <= 3; i++) for (let j = 0; j <= 3; j++) if (lyWet(x - m + (w + 2 * m) * i / 3, y - m + (h + 2 * m) * j / 3)) return true; return false; }
+function lyRectOv(a, b, m) { return a.x < b.x + b.w + m && a.x + a.w + m > b.x && a.y < b.y + b.h + m && a.y + a.h + m > b.y; }
+function lyBiomeBad(x, y) { try { const b = biomeAt(x, y); return b === "ocean" || b === "beach"; } catch (e) { return false; } }
+function lyShift(o, dx, dy) { o.x += dx; o.y += dy; if (o.door) { o.door.x += dx; o.door.y += dy; } if (o.hdoor) { o.hdoor.x += dx; o.hdoor.y += dy; } }
+
+// ---------- 1) casas: nada em cima de água, nada sobreposto ----------
+function lyPlaceHouses(Wd) {
+  const houses = Wd.obs.filter((o) => o.type === "cabana" && o.vil);
+  houses.forEach((h) => {
+    const others = () => Wd.obs.filter((o) => o !== h && o.type !== "bridge" && (!o.nosolid || o.type === "stall"));
+    const ok = (x, y) => {
+      const r = { x, y, w: h.w, h: h.h }; if (x < 300 || y < 40 || x + h.w > 2330 || y + h.h > 1150) return false;
+      const ob = others(); for (let i = 0; i < ob.length; i++) if (lyRectOv(r, ob[i], 34)) return false;
+      for (let i = 0; i < BRIDGES.length; i++) if (lyRectOv(r, BRIDGES[i], 50)) return false;
+      if (Wd.obs.some((o) => o.nosolid && (o.type === "plaza" || o.type === "steps" || o.type === "valearch") && lyRectOv(r, o, 20))) return false;
+      if (lyBiomeBad(x + h.w / 2, y + h.h / 2)) return false;
+      if (lyRectWet(x, y, h.w, h.h + 34, 22)) return false; // inclui frente/porta
+      return true;
+    };
+    if (ok(h.x, h.y)) return;
+    let best = null, bd = 1e9; for (let rad = 30; rad <= 700 && !best; rad += 30) { for (let a = 0; a < 24; a++) { const ang = a / 24 * 6.283, x = Math.round(h.x + Math.cos(ang) * rad), y = Math.round(h.y + Math.sin(ang) * rad * .8); if (ok(x, y)) { const d = Math.hypot(x - h.x, y - h.y); if (d < bd) { bd = d; best = [x, y]; } } } }
+    if (best) lyShift(h, best[0] - h.x, best[1] - h.y);
+  });
+}
+
+// ---------- 2) A* de estradas ----------
+function lyBuildGrid(Wd) {
+  const C = LY.cell, cols = Math.ceil((LY.x1 - LY.x0) / C), rows = Math.ceil((LY.y1 - LY.y0) / C), blk = new Uint8Array(cols * rows), bridge = new Uint8Array(cols * rows), solid = lySolidObs(Wd);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const x = LY.x0 + i * C + C / 2, y = LY.y0 + j * C + C / 2, id = j * cols + i; let b = 0;
+    if (lyNearBridge(x, y, -1)) { bridge[id] = 1; }
+    else { if (lyWetM(x, y, 24) && !lyNearBridge(x, y, 90)) b = 1; else if (lyWet(x, y)) b = 1; }
+    if (!b && lyBiomeBad(x, y)) b = 1; if (!b && lyHit(solid, x, y, 14)) b = 1; blk[id] = b;
+  }
+  return { cols, rows, C, blk, bridge };
+}
+function lyFind(G, sx, sy, goalSet, allow) {
+  const cols = G.cols, rows = G.rows, C = G.C, si = Math.max(0, Math.min(cols - 1, Math.floor((sx - LY.x0) / C))), sj = Math.max(0, Math.min(rows - 1, Math.floor((sy - LY.y0) / C)));
+  const dist = new Float64Array(cols * rows).fill(1e9), prev = new Int32Array(cols * rows).fill(-1), heap = []; const push = (id, d) => { heap.push([d, id]); let k = heap.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (heap[p][0] <= heap[k][0]) break; const t = heap[p]; heap[p] = heap[k]; heap[k] = t; k = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { let l = 2 * k + 1, r = l + 1, m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; const t = heap[m]; heap[m] = heap[k]; heap[k] = t; k = m; } } return top; };
+  const s = sj * cols + si; dist[s] = 0; push(s, 0); const dirs = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.42], [-1, 1, 1.42], [1, -1, 1.42], [-1, -1, 1.42]];
+  let guard = 0;
+  while (heap.length) {
+    if (++guard > 80000) return null;
+    const [d, id] = pop(); if (d > dist[id]) continue; if (goalSet.has(id)) { const path = []; let c = id; while (c >= 0) { path.push(c); c = prev[c]; } return path.reverse(); }
+    const ci = id % cols, cj = (id / cols) | 0;
+    for (let k = 0; k < 8; k++) { const ni = ci + dirs[k][0], nj = cj + dirs[k][1]; if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue; const nid = nj * cols + ni; if (G.blk[nid] && !allow.has(nid)) continue;
+      if (dirs[k][0] && dirs[k][1] && ((G.blk[cj * cols + ni] && !allow.has(cj * cols + ni)) || (G.blk[nj * cols + ci] && !allow.has(nj * cols + ci)))) continue;
+      let c = dirs[k][2]; if (goalSet.has(nid)) c *= .25; if (G.bridge[nid] && dirs[k][1]) c *= 4; const nd = d + c; if (nd < dist[nid]) { dist[nid] = nd; prev[nid] = id; push(nid, nd); } }
+  }
+  return null;
+}
+function lyDP(pts, e) { if (pts.length < 3) return pts; let md = 0, mi = 0; const a = pts[0], b = pts[pts.length - 1], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; for (let i = 1; i < pts.length - 1; i++) { const d = Math.abs((pts[i][0] - a[0]) * dy - (pts[i][1] - a[1]) * dx) / L; if (d > md) { md = d; mi = i; } } if (md < e) return [a, b]; const l = lyDP(pts.slice(0, mi + 1), e), r = lyDP(pts.slice(mi), e); return l.slice(0, -1).concat(r); }
+function lyChaikin(p) { if (p.length < 3) return p; const o = [p[0]]; for (let i = 0; i < p.length - 1; i++) { const a = p[i], b = p[i + 1]; o.push([a[0] * .75 + b[0] * .25, a[1] * .75 + b[1] * .25]); o.push([a[0] * .25 + b[0] * .75, a[1] * .25 + b[1] * .75]); } o.push(p[p.length - 1]); return o; }
+function lySmooth(cells, G, ends) {
+  let raw = cells.map((id) => [LY.x0 + (id % G.cols) * G.C + G.C / 2, LY.y0 + ((id / G.cols) | 0) * G.C + G.C / 2]); if (ends[0]) raw.unshift(ends[0]); if (ends[1]) raw.push(ends[1]);
+  const simp = lyDP(raw, 30); let sm = lyChaikin(lyChaikin(simp)); const bad = (pts) => { for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 12); for (let k = 0; k <= n; k++) { const x = a[0] + (b[0] - a[0]) * k / n, y = a[1] + (b[1] - a[1]) * k / n; if (lyWet(x, y)) return true; } } return false; };
+  if (bad(sm)) sm = simp; if (bad(sm)) sm = raw; return sm.map((p) => [Math.round(p[0]), Math.round(p[1])]);
+}
+function lyBuildRoads(Wd) {
+  const G = lyBuildGrid(Wd), C = G.C, cols = G.cols, rows = G.rows, idOf = (x, y) => Math.max(0, Math.min(rows - 1, Math.floor((y - LY.y0) / C))) * cols + Math.max(0, Math.min(cols - 1, Math.floor((x - LY.x0) / C)));
+    // 2a) mantém só estradas que ficam totalmente fora da vila; coleta as saídas
+  const keep = [], exits = [];
+  Wd.roads.forEach((r) => { let seg = [], prev = null; const flush = () => { if (seg.length > 1) keep.push(seg); seg = []; }; for (let i = 0; i < r.length; i++) { const p = r[i], inn = lyInV(p[0], p[1]); if (inn) { if (seg.length) exits.push(seg[seg.length - 1]); flush(); } else { if (prev === true) exits.push(p); seg.push(p); } prev = inn; } flush(); });
+  Wd.roads = keep;
+  // 2b) âncoras
+  const HUB = { x: 1650, y: 592 }, anchors = [], used = new Set();
+  Wd.obs.forEach((o) => { if (!o.door || o.x > 3000 || o.type === "home") return; anchors.push({ x: o.door.x + o.door.w / 2, y: o.door.y + o.door.h + 16, k: "door" }); });
+  const board = Wd.obs.find((o) => o.type === "board" && o.x < 3000); if (board) anchors.push({ x: board.x + board.w / 2, y: board.y + board.h + 18, k: "b" });
+  const mine = Wd.obs.find((o) => o.type === "mineentry"); if (mine) anchors.push({ x: mine.x + mine.w / 2 + 20, y: mine.y + mine.h + 32, k: "mine" });
+  const arch = Wd.obs.find((o) => o.type === "valearch" && o.x < 3000); if (arch) anchors.push({ x: arch.x + 60, y: arch.y + arch.h + 148, k: "arch" });
+  const st = Wd.obs.filter((o) => o.type === "stall"); if (st.length) { anchors.push({ x: st[0].x + st[0].w / 2, y: st[0].y + st[0].h + 22, k: "stall" }); anchors.push({ x: st[st.length - 1].x + st[st.length - 1].w / 2, y: st[st.length - 1].y + st[st.length - 1].h + 22, k: "stall" }); }
+  Wd.obs.forEach((o) => { if (o.type === "shop" && o.x < 3000) anchors.push({ x: o.x + o.w / 2, y: o.y + o.h + 20, k: "shop" }); if (o.type === "camarim" && o.x < 3000) anchors.push({ x: o.x + o.w / 2, y: o.y + o.h + 20, k: "cam" }); if (o.type === "hutBig" && o.x < 3000) anchors.push({ x: o.x + o.w / 2, y: o.y + o.h + 22, k: "big" }); });
+  exits.forEach((p) => anchors.push({ x: Math.max(LY.x0 + 30, Math.min(LY.x1 - 30, p[0])), y: Math.max(LY.y0 + 30, Math.min(LY.y1 - 30, p[1])), k: "exit", raw: p }));
+  anchors.sort((a, b) => Math.hypot(a.x - HUB.x, a.y - HUB.y) - Math.hypot(b.x - HUB.x, b.y - HUB.y));
+    // 2c) rede incremental
+  const allow = new Set(), net = new Set(), hubId = idOf(HUB.x, HUB.y); allow.add(hubId); for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) allow.add(hubId + a + b * cols);
+  net.add(hubId); const polys = [];
+  anchors.forEach((an) => {
+    const al = new Set(allow), aid = idOf(an.x, an.y); for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) { const id = aid + a + b * cols; if (id >= 0 && id < cols * rows) al.add(id); }
+    if (net.has(aid)) return; const path = lyFind(G, an.x, an.y, net, al); if (!path) return;
+    path.forEach((id) => { net.add(id); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const nid = id + a + b * cols; if (nid >= 0 && nid < cols * rows && !G.blk[nid]) net.add(nid); } });
+    const ends = [[an.raw || [Math.round(an.x), Math.round(an.y)], null]]; const last = path[path.length - 1]; polys.push(lySmooth(path, G, [an.raw ? an.raw : [an.x, an.y], null]));
+  });
+  polys.forEach((p) => { if (p.length > 1) Wd.roads.push(p); }); Wd._vroads = polys;
+}
+
+// ---------- 3) limpeza e vegetação ----------
+function lyRoadD(Wd, x, y) { let md = 1e9; const rr = Wd._vroads || []; for (let k = 0; k < rr.length; k++) { const r = rr[k]; for (let j = 1; j < r.length; j++) { const d = _segD(x, y, r[j - 1], r[j]); if (d < md) md = d; } } return md; }
+function lyClean(Wd) {
+  const solid = lySolidObs(Wd), tree = (q) => q.type === "tree_fruit" || q.type === "tree_pine" || q.type === "bush";
+  const bad = (x, y, rad) => lyWetM(x, y, 14) || lyBiomeBad(x, y) || !!lyHit(solid, x, y, 24) || lyRoadD(Wd, x, y) < (rad || 40) || lyNearBridge(x, y, 40);
+  Wd.props = Wd.props.filter((q) => { if (!tree(q)) return true; const cx = q.x + q.w / 2, cy = q.y + q.h - 6; if (!lyInV(cx, cy) || cx > 3000) return true; return !bad(cx, cy, 42); });
+  Wd.obs = Wd.obs.filter((o) => { if (o.type !== "rock" || !lyInV(o.x, o.y) || o.x > 3000) return true; return !(lyWetM(o.x + o.w / 2, o.y + o.h / 2, 18) || lyRoadD(Wd, o.x + o.w / 2, o.y + o.h / 2) < 44 || lyHit(solid.filter((s) => s !== o), o.x + o.w / 2, o.y + o.h / 2, 20)); });
+  // decoração da vila: sem água, sem sobrepor edifícios, sem estrada em cima
+  Wd.obs = Wd.obs.filter((o) => { if (!o.vil || o.x > 3000) return true; if (["flowerbed", "totem", "barrel", "bench", "sign"].indexOf(o.type) < 0) return true; const cx = o.x + o.w / 2, cy = o.y + o.h / 2; if (lyWetM(cx, cy, 10) || lyHit(solid.filter((s) => s !== o), cx, cy, 10)) return false; if (o.type !== "bench" && o.type !== "sign" && lyRoadD(Wd, cx, cy) < 24) return false; return true; });
+  // luminárias
+  Wd.obs = Wd.obs.filter((o) => !(o.type === "lamp" && o.vil)); const lamps = [];
+  (Wd._vroads || []).forEach((r, ri) => { if (ri > 9) return; let acc = 0; for (let j = 1; j < r.length; j++) { const L = Math.hypot(r[j][0] - r[j - 1][0], r[j][1] - r[j - 1][1]); for (let d = 100 - acc; d < L; d += 220) { const t = d / L, x = r[j - 1][0] + (r[j][0] - r[j - 1][0]) * t + 28, y = r[j - 1][1] + (r[j][1] - r[j - 1][1]) * t; if (lyWetM(x, y, 10) || lyHit(solid, x, y, 14) || lyNearBridge(x, y, 20) || lamps.some((q) => Math.hypot(q[0] - x, q[1] - y) < 140)) continue; lamps.push([x, y]); } acc = (acc + L) % 220; } });
+  lamps.forEach((l) => Wd.obs.push({ x: l[0] - 8, y: l[1] - 38, w: 16, h: 44, type: "lamp", nosolid: true, vil: 1 }));
+  // juncos nas margens (recoloca)
+  Wd.obs = Wd.obs.filter((o) => !(o.type === "reeds" && o.x < 3000)); let nr = 0;
+  if (lyOK()) RIVERS[0].pts.forEach((p, i) => { if (!i) return; const a = RIVERS[0].pts[i - 1]; for (let k = 0; k < 4; k++) { const t = (k + .5) / 4, x = a[0] + (p[0] - a[0]) * t, y = a[1] + (p[1] - a[1]) * t, side = (i + k) % 2 ? 1 : -1; for (let off = 34; off < 70; off += 6) { const bx = x + side * off; if (!lyWet(bx, y) && !lyNearBridge(bx, y, 20) && lyRoadD(Wd, bx, y) > 40 && !lyHit(solid, bx, y, 10)) { Wd.obs.push({ x: bx - 9, y: y - 8, w: 18, h: 22, type: "reeds", nosolid: true, vil: 1 }); nr++; break; } } } });
+}
+function lyPlantTrees(Wd) {
+  let seed = 4242, rn = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const solid = lySolidObs(Wd), trees = Wd.props.filter((q) => q.type === "tree_fruit" || q.type === "tree_pine" || q.type === "bush"), pts = trees.map((q) => [q.x + q.w / 2, q.y + q.h]);
+  const npcs = Wd.npcs.map((n) => [n.x, n.y]); let n = 0, id = 0;
+  for (let t = 0; t < 3000 && n < 110; t++) {
+    const x = LY.x0 + 40 + rn() * (LY.x1 - LY.x0 - 80), y = 50 + rn() * 1120; if (x > 2420 && y < 1100) continue;
+    if (lyWetM(x, y, 36) || lyBiomeBad(x, y) || lyHit(solid, x, y, 54) || lyRoadD(Wd, x, y) < 60 || lyNearBridge(x, y, 60)) continue;
+    if (Math.hypot(x - 1650, y - 590) < 250) continue; if (Wd.obs.some((o) => o.nosolid && (o.type === "plaza" || o.type === "steps" || o.type === "festbanner" || o.type === "flowerbed" || o.type === "stall" || o.type === "totem") && x > o.x - 50 && x < o.x + o.w + 50 && y > o.y - 50 && y < o.y + o.h + 50)) continue;
+    if (pts.some((p) => Math.hypot(p[0] - x, p[1] - y) < 100) || npcs.some((p) => Math.hypot(p[0] - x, p[1] - y) < 60)) continue;
+    const r = rn(), type = r < .4 ? "tree_pine" : r < .78 ? "tree_fruit" : "bush", w = type === "bush" ? 40 : type === "tree_pine" ? 46 : 50, h = type === "bush" ? 32 : type === "tree_pine" ? 64 : 60;
+    Wd.props.push(mkProp({ id: "vt2_" + (id++), type, x: Math.round(x - w / 2), y: Math.round(y - h), w, h, chance: .4 })); pts.push([x, y]); n++;
+  }
+}
+function lyFixPeople(Wd) {
+  const solid = lySolidObs(Wd);
+  Wd.npcs.forEach((n) => { if (!lyInV(n.x, n.y) || n.x > 3000) return; const bad = (x, y) => lyWetM(x, y, 8) || lyBiomeBad(x, y) || !!lyHit(solid, x, y, 6); if (!bad(n.x, n.y)) return; for (let rad = 24; rad < 360; rad += 24) for (let a = 0; a < 16; a++) { const x = n.x + Math.cos(a / 16 * 6.283) * rad, y = n.y + Math.sin(a / 16 * 6.283) * rad; if (!bad(x, y)) { n.x = n.hx = Math.round(x); n.y = n.hy = Math.round(y); return; } } });
+  // pontos de pesca: em terra, perto da água
+  (Wd.fish || []).forEach((f) => { if (!((lyInV(f.x, f.y) && f.x < 3000) || f.x > 4700)) return; const good = (x, y) => !lyWet(x, y) && !lyHit(solid, x, y, 8) && !lyBiomeBad(x, y) && lyWetM(x, y, 56); if (good(f.x, f.y)) return; for (let rad = 16; rad < 200; rad += 16) for (let a = 0; a < 20; a++) { const x = f.x + Math.cos(a / 20 * 6.283) * rad, y = f.y + Math.sin(a / 20 * 6.283) * rad; if (good(x, y)) { f.x = Math.round(x); f.y = Math.round(y); return; } } });
+}
+function villageFix(Wd) {
+  if (!lyOK()) return; try { valeEast(Wd); Wd.props = Wd.props.filter((q) => !(q.x > 4700 && (q.type === 'tree_fruit' || q.type === 'tree_pine' || q.type === 'bush') && lyWetM(q.x + q.w / 2, q.y + q.h - 4, 12))); } catch (e) { console.error('valeEast', e); } try { const T=Date.now(); lyPlaceHouses(Wd); lyBuildRoads(Wd); lyClean(Wd); lyFixPeople(Wd); lyPlantTrees(Wd); } catch (e) { console.error("villageFix", e); }
+}
+
+// ---------- Vale Lareira: margem leste do riacho (Observatório, pomar, piquenique) ----------
+Object.assign(INT, {
+  observatorio: INTR("Observatório da Estelina", { rug: "#2a3a6a", wall: "#3a3458", floor: "#5a4a6a", npcs: [NPCI("Astrônoma Estelina", "#bfc8e8", "#6a76a8", "#e8b84b", ["Sua avó e eu seguíamos o Sinal toda noite. Ela dizia que um dia alguém viria com dois guardiões bege e pretos...", "O telescópio aponta para Cão Maior. Lá embaixo, na Mina do Pedregulho, há um cristal que canta a mesma nota do Sinal.", "Cake sente o cheiro do minério, Cookie ouve a frequência. Juntos, vocês vão longe.", "Gosto desta margem do riacho: do outro lado só tem fazenda, deste lado só tem céu."], { x: 400, y: 240, hat: "#e8b84b" })], props: [mkProp({ id: "ob1", type: "crate", x: 240, y: 330, w: 36, h: 32, chance: .5 }), mkProp({ id: "ob2", type: "urn", x: 540, y: 330, w: 30, h: 40, chance: .5 })], furn: [{ type: "shelf", x: 300, y: 120 }, { type: "shelf", x: 450, y: 120 }, { type: "basket", x: 320, y: 340, w: 34, h: 24 }, { type: "drum", x: 520, y: 240, w: 22, h: 28 }] }),
+});
+function valeEast(Wd) {
+  if (Wd._ve) return; Wd._ve = 1; const O = (x, y, w, h, type, ex) => { const o = Object.assign({ x, y, w, h, type, vale: 1 }, ex || {}); Wd.obs.push(o); return o; };
+  const okLand = (x, y, m) => biomeAt(x, y) === "farm" && !lyWetM(x, y, m || 20);
+  // observatório
+  const ob = O(6360, 410, 150, 120, "cabana", { v: 3, title: "Observatório da Estelina" }); ob.door = { x: ob.x + 59, y: ob.y + ob.h - 2, w: 32, h: 16 }; ob.interior = "observatorio";
+  const R = [[[6330, 592], [6380, 586], [6425, 568]], [[6385, 588], [6405, 660], [6430, 760]], [[6330, 592], [6340, 650], [6310, 710]]]; R.forEach((r) => Wd.roads.push(r));
+  O(6320, 630, 60, 36, "bench", { nosolid: true }); O(6440, 560, 70, 34, "flowerbed", { nosolid: true, c: 2 }); O(6340, 360, 70, 34, "flowerbed", { nosolid: true, c: 5 });
+  O(6296, 742, 56, 32, "dockflat", { nosolid: true }); Wd.fish.push({ x: 6312, y: 792, kind: "coast" });
+  [[6350, 584], [6420, 650], [6330, 700], [6440, 540]].forEach((a) => { if (okLand(a[0], a[1], 8)) O(a[0] - 8, a[1] - 38, 16, 44, "lamp", { nosolid: true }); });
+  O(6470, 620, 24, 28, "barrel", {}); O(6450, 655, 40, 30, "hay", { nosolid: true });
+  O(6262, 500, 100, 40, "sign", { nosolid: true, label: "→ Observatório · Pomar" });
+  // lagoa sul do Vale: doca, banco, caminho
+  Wd.roads.push([[5690, 700], [5720, 800], [5730, 920], [5700, 1050], [5640, 1120]]); O(5470, 1086, 60, 34, "dockflat", { nosolid: true }); O(5570, 1110, 60, 36, "bench", { nosolid: true }); Wd.fish.push({ x: 5500, y: 1140, kind: "coast" }, { x: 5300, y: 1085, kind: "coast" });
+  [[5640, 880], [5590, 960], [5690, 990], [5760, 1060], [5340, 1130], [5240, 1040], [5230, 950], [5360, 900], [5470, 1170], [5640, 1180]].forEach((a, i) => { if (okLand(a[0], a[1], 10)) Wd.props.push(mkProp({ id: "vs_" + i, type: i % 3 === 2 ? "bush" : i % 2 ? "tree_fruit" : "tree_pine", x: a[0] - 24, y: a[1] - 60, w: 48, h: 60, chance: .5 })); });
+  // pomar de macieiras (grade) + vegetação
+  let id = 0; const trees = [];
+  for (let gx = 0; gx < 3; gx++) for (let gy = 0; gy < 4; gy++) { const x = 6360 + gx * 70, y = 700 + gy * 74; if (okLand(x, y, 26) && !Wd.obs.some((o) => o.x < x + 30 && o.x + o.w > x - 30 && o.y < y + 20 && o.y + o.h > y - 60 && !(o.type === "flowerbed"))) trees.push([x, y, "tree_fruit"]); }
+  [[6340, 380, "tree_pine"], [6520, 400, "tree_pine"], [6510, 330, "tree_fruit"], [6400, 330, "tree_pine"], [6330, 300, "tree_fruit"], [6470, 290, "tree_pine"], [6500, 480, "tree_pine"], [6510, 600, "tree_fruit"], [6340, 250, "bush"], [6450, 360, "bush"], [6330, 820, "bush"], [6430, 860, "tree_pine"], [6370, 900, "tree_fruit"]].forEach((a) => { if (okLand(a[0], a[1], 24)) trees.push(a); });
+  Wd.props = Wd.props.filter((q) => !(q.x > 6280 && q.x < 6560 && q.y > 200 && q.y < 960 && trees.concat([[6420, 480], [6330, 640], [6400, 620]]).some((t) => Math.abs(q.x + q.w / 2 - t[0]) < 40 && Math.abs(q.y + q.h - t[1]) < 40)));
+  trees.forEach((t) => { const type = t[2], w = type === "bush" ? 40 : type === "tree_pine" ? 46 : 50, h = type === "bush" ? 32 : type === "tree_pine" ? 64 : 60; Wd.props.push(mkProp({ id: "ve_" + (id++), type, x: t[0] - w / 2, y: t[1] - h, w, h, chance: .5 })); });
+}
+LAKES.push({ x: 5430, y: 1000, rx: 170, ry: 80 });
+SHADES.village = ["#86ab58", "#81a755", "#8db55f"];
+
+// ============================================================
+// pv32: SINCRONIA COOPERATIVA — mesmos monstros, mesmas estruturas, luta em conjunto
+//  · Estruturas/masmorras geradas com semente determinística (iguais para todos)
+//  · Cada "arena" (mundo, planeta, estrutura) tem um DONO (menor id presente) que simula os monstros
+//  · Os demais recebem snapshots (8 Hz), enviam seus golpes ao dono e recebem dano dele
+// ============================================================
+function hashStr(s) { let h = 2166136261; s = String(s); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function withSeed(sd, fn) { const old = Math.random, s0 = _s; seedRnd(sd); Math.random = rnd; try { return fn(); } finally { Math.random = old; _s = s0; } }
+// masmorras do mundo (Escavação, Cemitério, Vulcão…) também determinísticas
+function enterDungeon(id, trg) {
+  if (id === "ore") { enterOre(trg); return; }
+  withSeed(hashStr("dg|" + id + "|" + wseedOff()), () => enterDungeon0(id, trg));
+  if (D && !D.skey && D.id !== "struct") D.skey = "g:" + id;
+}
+const SYNC = { k: null, lastLoc: null, t: 0, tm: 0, first: true };
+const FACES = ["down", "up", "left", "right"];
+function arenaOK() { return MP.on && ((scene === "world" && !X.farmIn) || (scene === "planet" && PL) || (scene === "dungeon" && D && !D.ore)); }
+function arenaPlayers() { const k = locKey(), a = []; if (k === "x") return a; Object.keys(MP.players).forEach((id) => { const r = MP.players[id]; if (r.k === k) a.push(r); }); return a; }
+function arenaShared() { return arenaOK() && arenaPlayers().length > 0; }
+function arenaOwnerId() { let o = MP.id; arenaPlayers().forEach((r) => { if (r.id < o) o = r.id; }); return o; }
+function arenaOwner() { return arenaOwnerId() === MP.id; }
+function mpDrawDungeon() { if (!MP.on || scene !== "dungeon" || !D) return; const key = locKey(); if (key === "x") return; Object.keys(MP.players).forEach((id) => { const r = MP.players[id]; if (r.k === key) drawRemote(r, r.x - camera.x, r.y - camera.y); }); }
+
+// ---------- golpes: não-dono envia ao dono ----------
+function hurtEnemy(e, amt, sx, sy, knock) {
+  amt = amt * diffDeal();
+  if (MP.on && arenaShared() && !arenaOwner() && !e.dead) { const i = curEnemies().indexOf(e); if (i >= 0) { mpSend({ t: "eh", to: arenaOwnerId(), k: locKey(), i, d: Math.round(amt * 10) / 10, sx: Math.round(sx), sy: Math.round(sy), kb: knock || 0 }); e.flash = .12; return; } }
+  hurtEnemy0(e, amt, sx, sy, knock);
+}
+// ---------- IA: dono simula com vários alvos; demais interpolam ----------
+function updateEnemiesAI(dt, list, inWorld) {
+  if (!MP.on || !arenaShared()) return updateEnemiesAI0(dt, list, inWorld);
+  if (!arenaOwner()) { syncInterp(dt, list); return; }
+  updateEnemiesAIShared(dt, list, inWorld); syncBroadcast(list);
+}
+function syncInterp(dt, list) { list.forEach((e) => { if (e._tx != null && !e.dead) { const k = Math.min(1, dt * 12); e.x += (e._tx - e.x) * k; e.y += (e._ty - e.y) * k; } e.wob = (e.wob || 0) + dt * 2.5; if (e.atkCd > 0) e.atkCd -= dt; if (e.stun > 0) e.stun -= dt; }); }
+function aiTargets() { const T = [{ x: P.x, y: P.y, swim: P.swim, me: true }]; arenaPlayers().forEach((r) => T.push({ x: r.x, y: r.y, swim: false, id: r.id })); return T; }
+function hitTarget(t, dmg, ghost) { if (t.me) hurt(dmg, { ghost: !!ghost }); else mpSend({ t: "pd", to: t.id, d: dmg, g: ghost ? 1 : 0 }); }
+function updateEnemiesAIShared(dt, list, inWorld) {
+  const c = catData(), T = aiTargets();
+  list.forEach((e) => {
+    const d = EN[e.kind]; if (!d) return;
+    if (e.dead) { if (inWorld && e.respawn > 0) { e.respawn -= dt; if (e.respawn <= 0) { e.dead = false; e.hp = e.hpMax; e.x = e.hx; e.y = e.hy; e.burn = null; } } return; }
+    tickBurn(e, dt); if (e.dead) return;
+    e.wob += dt * 2.5; if (e.atkCd > 0) e.atkCd -= dt;
+    if (d.boss) { updateBossShared(e, dt, T); return; }
+    if (e.stun > 0) { e.stun -= dt; return; }
+    const seaOnly = d.biomes && d.biomes[0] === "ocean"; let det = d.det * (1 - (c.detRed || 0)); if (d.fly) det = Math.max(det, 110);
+    let best = null, bd = 1e9;
+    T.forEach((t) => { const see = seaOnly ? t.swim : !(inWorld && t.swim); if (!see) return; const dd = dist(t.x, t.y, e.x, e.y); if (dd < det && dd < bd) { bd = dd; best = t; } });
+    if (decoy && dist(decoy.x, decoy.y, e.x, e.y) < det * 1.2) { best = { x: decoy.x, y: decoy.y, decoy: 1 }; bd = dist(decoy.x, decoy.y, e.x, e.y); }
+    let mx = 0, my = 0;
+    if (best) { mx = (best.x - e.x) / (bd || 1); my = (best.y - e.y) / (bd || 1); e.state = "chase"; }
+    else {
+      e.pT -= dt; if (e.pT <= 0) { e.pT = 1.4 + Math.random() * 2; e.pDir = Math.random() * 6.28; }
+      const hd = dist(e.hx, e.hy, e.x, e.y); if (hd > 120) { mx = (e.hx - e.x) / hd; my = (e.hy - e.y) / hd; } else if (d.fly) { mx = Math.cos(e.wob) * 0.7 + (e.hx - e.x) * 0.01; my = Math.sin(e.wob * 1.3) * 0.7 + (e.hy - e.y) * 0.01; } else if (e.pDir != null && Math.random() > 0.002) { mx = Math.cos(e.pDir) * 0.6; my = Math.sin(e.pDir) * 0.6; }
+    }
+    let sp = d.sp; if (e.slow > 0) { e.slow -= dt; sp *= 0.4; } if (c.slowR && dist(P.x, P.y, e.x, e.y) < c.slowR) sp *= 1 - c.slowP * catLvlMult();
+    const nx = e.x + mx * sp * dt, ny = e.y + my * sp * dt;
+    if (inWorld === "planet") { if (!blockedPl(nx, e.y, e.w, e.h)) e.x = clamp(nx, 20, PL.w - 20); if (!blockedPl(e.x, ny, e.w, e.h)) e.y = clamp(ny, 20, PL.h - 20); }
+    else if (inWorld) { const b = biomeAt(nx, ny); if (!d.biomes || d.biomes.indexOf(b) > -1) { e.x = clamp(nx, 20, WORLD_W - 20); e.y = clamp(ny, 20, WORLD_H - 20); } else e.pDir = Math.random() * 6.28; }
+    else { if (!blockedDun(nx, e.y, e.w, e.h)) e.x = nx; if (!blockedDun(e.x, ny, e.w, e.h)) e.y = ny; }
+    if (mx || my) e.face = faceOf(mx, my, e.face);
+    if (e.atkCd <= 0) for (let i = 0; i < T.length; i++) { const t = T[i]; if (overlap(box(e), box({ x: t.x, y: t.y, w: P.w, h: P.h })) && !(inWorld && t.swim && !seaOnly)) { hitTarget(t, d.dmg, d.ghost); e.atkCd = d.cd; break; } }
+  });
+}
+function updateBossShared(e, dt, T) {
+  const d = EN[e.kind]; e.sway += dt;
+  if (e.phase === 1 && e.hp <= e.hpMax * 0.5) {
+    e.phase = 2; e.atkT = Math.min(e.atkT, 1.2); toast("A fúria do guardião desperta! Lacaios surgem.", 2600);
+    const addK = e.kind === "guardian" ? "bug" : "skeleton"; D.enemies.push(mkEnemy(addK, e.x - 120, e.y + 120, { bossAdd: true }), mkEnemy(addK, e.x + 120, e.y + 120, { bossAdd: true }));
+  }
+  if (e.stun > 0) e.stun -= dt; else { e.atkT -= dt; if (e.atkT <= 0) { e.atkT = e.phase === 1 ? 2.6 : 1.7; const t = T[Math.floor(Math.random() * T.length)]; e.tele.push({ x: clamp(t.x + (Math.random() - 0.5) * 40, 80, D.w * TS - 80), y: clamp(t.y + (Math.random() - 0.5) * 40, 80, D.h * TS - 80), r: 46, t: 0.9, tot: 0.9, dmg: d.dmg }); } }
+  e.tele = e.tele.filter((t) => { t.t -= dt; if (t.t <= 0) { T.forEach((q) => { if (dist(q.x, q.y, t.x, t.y) < t.r) hitTarget(q, t.dmg, false); }); return false; } return true; });
+}
+// ---------- snapshots ----------
+function syncBroadcast(list) {
+  const now = Date.now(); if (now - SYNC.t < 115) return; SYNC.t = now; const T = aiTargets(), all = scene === "dungeon", rows = [];
+  list.forEach((e, i) => { if (!e || !EN[e.kind]) return; if (!all) { let near = false; for (let k = 0; k < T.length; k++) if (Math.abs(T[k].x - e.x) < 1100 && Math.abs(T[k].y - e.y) < 900) { near = true; break; } if (!near) return; } rows.push([i, e.kind, Math.round(e.x), Math.round(e.y), Math.round(e.hp), e.dead ? 1 : 0, Math.max(0, FACES.indexOf(e.face)), e.phase || 0, Math.round(e.hx), Math.round(e.hy)]); });
+  mpSend({ t: "es", k: locKey(), e: rows });
+}
+function syncApply(m) {
+  const key = locKey(); if (m.k !== key || arenaOwner()) return; const list = curEnemies(); if (!list) return;
+  if (SYNC.k !== key) { SYNC.k = key; SYNC.first = true; } const first = SYNC.first; SYNC.first = false;
+  (m.e || []).forEach((r) => {
+    const i = r[0]; let e = list[i];
+    if (!e) { if (!EN[r[1]]) return; while (list.length < i) { const dm = mkEnemy(r[1], r[2], r[3]); dm.dead = true; dm.respawn = 0; list.push(dm); } e = mkEnemy(r[1], r[2], r[3]); e.hx = r[8]; e.hy = r[9]; list[i] = e; }
+    if (e.kind !== r[1]) return;
+    e._tx = r[2]; e._ty = r[3]; if (e._first == null || (Math.abs(e.x - r[2]) > 260 || Math.abs(e.y - r[3]) > 260)) { e.x = r[2]; e.y = r[3]; e._first = 1; } e.face = FACES[r[6]] || e.face; if (r[7]) e.phase = r[7];
+    if (r[5]) { if (!e.dead) { e.hp = 0; if (first) { e.dead = true; if (EN[e.kind].boss && D && D.struct) { const tx = Math.floor(e.x / TS), ty = Math.floor(e.y / TS); if (D.g[ty] && D.g[ty][tx] === ".") D.g[ty][tx] = "E"; const rec = (X.structs = X.structs || {})[D.struct.uid] || (X.structs[D.struct.uid] = {}); rec.cleared = 1; } } else killEnemy(e); } }
+    else { if (e.dead) { e.dead = false; e.respawn = 0; e.x = r[2]; e.y = r[3]; e.burn = null; } e.hp = r[4]; }
+  });
+}
+function syncHit(m) {
+  if (m.to !== MP.id || m.k !== locKey() || !arenaOwner()) return; const e = curEnemies()[m.i]; if (!e || e.dead) return; hurtEnemy0(e, m.d, m.sx, m.sy, m.kb);
+}
+function mpSyncHandle(m) {
+  if (m.t === "es") { syncApply(m); return true; }
+  if (m.t === "eh") { syncHit(m); return true; }
+  if (m.t === "pd") { if (m.to === MP.id && started && ui !== "cut" && (scene === "world" || scene === "planet" || scene === "dungeon")) hurt(m.d, { ghost: !!m.g }); return true; }
+  if (m.t === "tm") { if (MP.role === "guest" && Math.abs(dayT - m.dt) > 2 && scene === "world") dayT = m.dt; return true; }
+  return false;
+}
+function syncTick() {
+  if (!MP.on) return; const lk = locKey(); if (SYNC.lastLoc !== lk) { SYNC.lastLoc = lk; SYNC.k = null; }
+  if (MP.role === "host" && Date.now() - SYNC.tm > 3000) { SYNC.tm = Date.now(); mpSend({ t: "tm", dt: Math.round(dayT * 10) / 10 }); }
+}
+setInterval(() => { try { syncTick(); } catch (e) { } }, 500);
+setInterval(() => { if (window.PV && !window.PV.SYNC) Object.assign(window.PV, { SYNC, arenaShared, arenaOwnerId, withSeed, hashStr, mpSyncHandle, hurtEnemy, curEnemies }); }, 300);
+
 let last = performance.now();
 function loopCore(now) {
   const dt = Math.min((now - last) / 1000, 0.05); last = now;
@@ -5389,7 +5757,7 @@ function init() {
   el.btnCloseClass.addEventListener("click", () => { el["overlay-class"].classList.add("hidden"); ui = null; });
   el.btnCloseShop.addEventListener("click", closeShop); el.btnCloseInventory.addEventListener("click", closeInventory); el.btnCloseForge.addEventListener("click", closeForge);
   el.btnOpenInventory.addEventListener("click", () => { if (ui === null && started) openInventory(); });
-  sanitizeCoast(W); initX(); initLayout(); mpInit(); worldsInit(); farm2Init(); mineInit(); questInit();
+  sanitizeCoast(W); initX(); initLayout(); mpInit(); worldsInit(); farm2Init(); mineInit(); questInit(); lifeInit();
   requestAnimationFrame(loop);
 }
 init();
