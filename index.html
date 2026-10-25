@@ -437,6 +437,7 @@ function drawEnemyRaw(e, sx, sy) {
 function drawProp(p, ox, oy) {
   const sx = p.x - ox, sy = p.y - oy, w = p.w, h = p.h; const g = ctx; g.save();
   const t = p.type;
+  if (t === "tree_fruit" || t === "tree_pine") { drawTreeNice(g, t, sx, sy, w, h, p); g.restore(); return; }
   if (t === "statue") { g.fillStyle = "#6b6258"; g.fillRect(sx + w * .15, sy + h * .55, w * .7, h * .45); g.fillStyle = "#8a8074"; g.fillRect(sx + w * .28, sy, w * .44, h * .6); }
   else if (t === "fountain") {
     g.fillStyle = "#5c5850"; g.beginPath(); g.ellipse(sx + w / 2, sy + h * .6, w / 2, h * .35, 0, 0, 6.283); g.fill();
@@ -730,7 +731,7 @@ const INT = {
 // MASMORRAS (motor de tiles) — caverna principal, torre, arena da chefe e Grande Escavação (procedural)
 // ============================================================
 const SOLID_CH = "# DP1234MRVpwe5";
-function isSolidCh(c) { return c === "#" || c === " " || c === "D" || (c >= "1" && c <= "5") || c === "w" || c === "e" || c === "P" || c === "M" || c === "R" || c === "V" || c === "p"; }
+function isSolidCh(c) { return c === "#" || c === " " || c === "D" || (c >= "1" && c <= "5") || c === "w" || c === "e" || c === "P" || c === "M" || c === "R" || c === "V" || c === "p" || ORE_CH.indexOf(c) > -1; }
 const STATION = { P: { cat: "persa", open: "1", msg: "O Persa Tecnológico hackeia o painel! Um portão se abre." }, M: { cat: "mainecoon", open: "2", msg: "O Maine Coon puxa a corrente pesada! O portão sobe." }, R: { cat: "siames", open: "3", msg: "O Siamês Místico canaliza a runa! A passagem se revela." }, V: { cat: "azulrusso", open: "4", msg: "O Azul Russo gira a turbina de vento! O portão cede." }, p: { cat: "munchkin", open: "5", msg: "O Munchkin pisa na placa leve! Algo destrava." } };
 
 function gridMaker(w, h) {
@@ -865,7 +866,7 @@ function curSpeed() {
 }
 function checkFury() { if (P.fury >= FURY_MAX && P.furyT <= 0) { P.fury = 0; P.furyT = 6; effects.push({ t: "aura", x: P.x, y: P.y, life: 6, max: 6, c: "#e8b84b" }); toast("FÚRIA ATIVADA!", 1300); } }
 function hurt(amt, o) {
-  o = o || {};
+  o = o || {}; amt = amt * diffHurt(o);
   if (!o.env) {
     if (P.inv > 0 || P.dodging > 0) return;
     const c = catData(), dg = (P.cls.dodge || 0) + (c.dodge || 0) * catLvlMult() + ab("dodge");
@@ -884,12 +885,13 @@ function defeat() {
   if (scene === "planet") { planetDefeat(); return; }
   X.boatOn = false;
   toast("Você foi derrotado! Os moradores cuidaram de você na vila.", 2800); P.hp = P.hpMax; P.inv = 1.2; P.o2 = maxO2(); P.swim = false;
-  scene = "world"; D = null; IN = null; P.x = 520; P.y = 420; effects = []; projectiles = []; hazards = [];
+  scene = "world"; D = null; IN = null; P.x = HOME_SPOT.x; P.y = HOME_SPOT.y; effects = []; projectiles = []; hazards = [];
 }
 
 // ---------------- inimigos: dano, morte ----------------
 function inCone(px, py, tx, ty, fa) { let d = Math.abs(Math.atan2(ty - py, tx - px) - fa); if (d > Math.PI) d = Math.PI * 2 - d; return d < Math.PI / 2.2; }
 function hurtEnemy(e, amt, sx, sy, knock) {
+  amt = amt * diffDeal();
   if (e.dead) return; e.hp -= amt;
   if (knock && !EN[e.kind].boss) {
     const dx = e.x - sx, dy = e.y - sy, l = Math.hypot(dx, dy) || 1, nx = e.x + dx / l * knock, ny = e.y + dy / l * knock;
@@ -923,7 +925,7 @@ function aoe(cx, cy, r, dmg, knock, stun, cone) {
 function tickBurn(e, dt) { if (!e.burn) return; e.burn.t -= dt; e.burn.left -= dt; if (e.burn.t <= 0) { e.burn.t = 0.5; hurtEnemy(e, e.burn.d, e.x, e.y, 0); } if (e.burn && e.burn.left <= 0) e.burn = null; }
 
 // ---------------- ações do jogador ----------------
-function tryAttack() {
+function tryAttack0() {
   if (P.atkCd > 0) return; P.atkCd = 0.38; const f = fv(P.face);
   if (aoe(P.x + f[0] * 18, P.y + f[1] * 18, 30, curDamage(), 30, 0, null)) { P.fury = Math.min(FURY_MAX, P.fury + 3); checkFury(); }
   effects.push({ t: "swing", x: P.x + f[0] * 22, y: P.y + f[1] * 22, life: 0.12, max: 0.12, c: "#f3ead9", r: 16 });
@@ -1105,7 +1107,7 @@ function buildClassCards(swap) {
 function pickClass(id) {
   P.clsId = id; P.cls = CLASSES[id]; P.tint = null; P.actCd = 0; P.hpMax = P.cls.hp + ab("hpMax"); P.hp = P.hpMax; P.o2 = maxO2();
   el["overlay-class"].classList.add("hidden");
-  if (!started) { started = true; startHookX(); scene = "world"; P.x = 520; P.y = 420; spawnWorldEnemies(); toast("Bem-vindo à Vila Tribal! Fale com o Pajé na Grande Cabana para começar a missão principal.", 4200); } else toast("Variante equipada: " + P.cls.nome, 1800);
+  if (!started) { started = true; startHookX(); scene = "world"; P.x = HOME_SPOT.x; P.y = HOME_SPOT.y; spawnWorldEnemies(); toast("Bem-vindo à Vila Tribal! Fale com o Pajé na Grande Cabana para começar a missão principal.", 4200); } else toast("Variante equipada: " + P.cls.nome, 1800);
   ui = null;
 }
 let activeShop = SHOP_TRIBAL;
@@ -1196,6 +1198,7 @@ function buildDungeon(rows, themeKey, meta) {
   return dd;
 }
 function enterDungeon(id, trg) {
+  if (id === "ore") { enterOre(trg); return; }
   ret = { x: trg.x + trg.w / 2, y: trg.y - 28 };
   if (id === "boss" && Q.bossDown) { toast("A Floresta Sagrada está em paz — a Guardiã foi libertada.", 2500); return; }
   if (id === "cave") { if (!dun.cave) dun.cave = buildDungeon(mapCave(), "cave", { tag: "cave" }); D = dun.cave; }
@@ -1293,7 +1296,7 @@ function interiorInteract() {
 // ============================================================
 // UPDATE: masmorras
 // ============================================================
-function dungeonInteract() {
+function dungeonInteract0() {
   const f = fv(P.face), ptx = Math.floor((P.x + f[0] * 26) / TS), pty = Math.floor((P.y + f[1] * 26) / TS), cx = Math.floor(P.x / TS), cy = Math.floor(P.y / TS), cand = [[ptx, pty]];
   for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) cand.push([cx + i, cy + j]);
   for (let k = 0; k < cand.length; k++) {
@@ -1311,7 +1314,7 @@ function dungeonInteract() {
   }
   const p = nearestOf(D.props, P.x, P.y, 60); if (p) searchProp(p, D.meta.tag);
 }
-function updateDungeon(dt) {
+function updateDungeon0(dt) {
   if (D.guard > 0) D.guard -= dt;
   const [vx, vy] = moveVec(); P.moving = !!(vx || vy); const sp = curSpeed(), fn = (x, y) => blockedDun(x, y, P.w, P.h);
   if (P.dodging > 0) { const f = fv(P.face); movePlayer(f[0] * sp * dt, f[1] * sp * dt, fn); } else if (P.moving) { P.face = faceOf(vx, vy, P.face); movePlayer(vx * sp * dt, vy * sp * dt, fn); }
@@ -1350,7 +1353,7 @@ function drawEffects(ox, oy) {
 function renderWorld() {
   drawGround();
   ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
-  W.roads.forEach((r) => { ctx.beginPath(); r.forEach((pt, i) => { if (i) ctx.lineTo(pt[0] - camera.x, pt[1] - camera.y); else ctx.moveTo(pt[0] - camera.x, pt[1] - camera.y); }); ctx.strokeStyle = "rgba(0,0,0,.14)"; ctx.lineWidth = 36; ctx.stroke(); ctx.strokeStyle = "#a8916c"; ctx.lineWidth = 28; ctx.stroke(); });
+  drawRoadsNice(); riverFx();
   ctx.restore();
   // ponte de circuito (Vila → Cidade Neon)
   ctx.fillStyle = "rgba(33,199,214,.35)"; ctx.fillRect(1290 * WK - camera.x, 320 * WK - camera.y, 60, 22);
@@ -1366,7 +1369,7 @@ function renderWorld() {
   // espíritos e névoa do cemitério
   W.wisps.forEach((w) => { const sx = w.x + Math.sin(t * 0.6 + w.ph) * 24 - camera.x, sy = w.y + Math.cos(t * 0.5 + w.ph) * 16 - camera.y; if (sx < -30 || sx > VIEW_W + 30 || sy < -30 || sy > VIEW_H + 30) return; ctx.save(); ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 2 + w.ph); ctx.fillStyle = "#9fd8ff"; ctx.beginPath(); ctx.arc(sx, sy, 6, 0, 6.283); ctx.fill(); ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(sx, sy, 18, 0, 6.283); ctx.fill(); ctx.restore(); });
   if (b === "cemetery" || (P.y > 1300 * WK && P.x > 1000 * WK)) { ctx.save(); ctx.globalAlpha = 0.14; ctx.fillStyle = "#aab4d0"; for (let i = 0; i < 7; i++) { const fx = ((i * 337 + t * 18) % (VIEW_W + 400)) - 200, fy = (i * 83) % VIEW_H; ctx.beginPath(); ctx.ellipse(fx, fy, 190, 60, 0, 0, 6.283); ctx.fill(); } ctx.restore(); }
-  if (X.farmIn) farmSpaceOverlay();
+  if (X.farmIn) farmSpaceOverlay(); else if (scene === "world") seasonDraw();
   // luz do dia/noite
   const tt = dayT / 200, na = ((1 - Math.cos(tt * 6.283)) / 2) * 0.5 * (P.nvT > 0 ? 0.35 : 1) + (b === "cemetery" ? 0.16 : 0);
   if (na > 0.02) { ctx.fillStyle = "rgba(10,14,42," + na.toFixed(2) + ")"; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
@@ -1408,7 +1411,7 @@ function renderInterior() {
   d.npcs.forEach((n) => dr.push({ y: n.y, f: () => { if (n.sit) { ctx.fillStyle = "#7a3b2a"; ctx.beginPath(); ctx.ellipse(n.x, n.y, 34, 12, 0, 0, 6.283); ctx.fill(); } drawNPC(n, n.x, n.y); } }));
   dr.sort((a, b) => a.y - b.y); dr.forEach((x) => x.f()); drawEffects(0, 0);
 }
-function drawTile(c, sx, sy, th, tx, ty) {
+function drawTile0(c, sx, sy, th, tx, ty) {
   const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0, g = ctx, t = Date.now();
   if (c === "#" || c === " ") { g.fillStyle = th.wall; g.fillRect(sx, sy, TS, TS); if (!isSolidCh(tileAt(tx, ty + 1))) { g.fillStyle = th.top; g.fillRect(sx, sy + TS - 10, TS, 10); } return; }
   g.fillStyle = (h % 4 === 0) ? th.alt : th.floor; g.fillRect(sx, sy, TS, TS);
@@ -1425,7 +1428,7 @@ function drawTile(c, sx, sy, th, tx, ty) {
   else if (c === ">" || c === "<") { g.fillStyle = "#6a6a78"; for (let i = 0; i < 4; i++) g.fillRect(sx + 2, sy + 2 + i * 7, TS - 4, 5); g.fillStyle = "#e8b84b"; g.font = "bold 16px monospace"; g.textAlign = "center"; g.fillText(c === ">" ? "▼" : "▲", sx + 16, sy + 22); }
   else if (STATION[c]) { g.fillStyle = "#2c3640"; g.fillRect(sx, sy, TS, TS); g.fillStyle = D && D.used[tx + "," + ty] ? "#6fd98a" : "#ff9f3a"; g.beginPath(); g.arc(sx + 16, sy + 14, 7, 0, 6.283); g.fill(); g.fillStyle = "#cfd8e0"; g.font = "bold 10px monospace"; g.textAlign = "center"; g.fillText({ P: "PC", M: "⛓", R: "ᚱ", V: "🌀", p: "▣" }[c], sx + 16, sy + 29); }
 }
-function renderDungeon() {
+function renderDungeon0() {
   ctx.fillStyle = "#050408"; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   const x0 = Math.floor(camera.x / TS), y0 = Math.floor(camera.y / TS);
   for (let ty = y0; ty <= y0 + Math.ceil(VIEW_H / TS) + 1; ty++) for (let tx = x0; tx <= x0 + Math.ceil(VIEW_W / TS) + 1; tx++) { if (tx < 0 || ty < 0 || tx >= D.w || ty >= D.h) continue; drawTile(D.g[ty][tx], tx * TS - camera.x, ty * TS - camera.y, D.theme, tx, ty); }
@@ -1665,8 +1668,8 @@ const HBR = { home: .5, barn: .5, hut: .55, hutBig: .55, shop: .55, neonhut: .55
 function hbOf(o) { if (o._hb) return o._hb; let r = HBR[o.type]; if (o.type === "mailbox") o._hb = { x: o.x + 5, y: o.y + 26, w: o.w - 10, h: 16 }; else if (o.type === "home") o._hb = { x: o.x + 6, y: o.y + 40, w: o.w - 12, h: o.h - 54 }; else if (o.type === "well") o._hb = { x: o.x + 4, y: o.y + 18, w: o.w - 8, h: o.h - 20 }; else if (o.type === "bin") o._hb = { x: o.x + 3, y: o.y + 12, w: o.w - 6, h: o.h - 14 }; else if (o.type === "chestbox") o._hb = { x: o.x + 3, y: o.y + 10, w: o.w - 6, h: o.h - 12 }; else if (r) { const ih = o.h * r, ins = Math.min(8, o.w * .06); o._hb = { x: o.x + ins, y: o.y + o.h - ih, w: o.w - ins * 2, h: ih }; } else o._hb = { x: o.x + 2, y: o.y + 2, w: o.w - 4, h: o.h - 4 }; return o._hb; }
 const TREEHB = { tree_fruit: 1, tree_pine: 1, statue: 1, fountain: 1 };
 function propHb(p) { return p.type === "fountain" ? { x: p.x + 4, y: p.y + p.h * .35, w: p.w - 8, h: p.h * .6 } : { x: p.x + p.w / 2 - 8, y: p.y + p.h - 16, w: 16, h: 12 }; }
-function blockedWorldX(x, y, w, h) { if (X.farmIn && Math.hypot(x - FARM_C.x, y - FARM_C.y) > FARM_R - 18) return true; const b = { x: x - w / 2, y: y - h / 2, w, h }; for (let i = 0; i < W.obs.length; i++) { const o = W.obs[i]; if (o.nosolid) continue; if (o.x > b.x + b.w + 4 || o.x + o.w < b.x - 4) continue; if (overlap(b, hbOf(o))) return true; } for (let i = 0; i < W.props.length; i++) { const p = W.props[i]; if (!TREEHB[p.type] || p.x > b.x + b.w + 4 || p.x + p.w < b.x - 4) continue; if (overlap(b, propHb(p))) return true; } return false; }
-const FLATOBS = { fieldbed: 1, pond: 1, dockSign: 0 };
+function blockedWorldX(x, y, w, h) { if (riverBlocked(x, y, w, h)) return true; if (X.farmIn && Math.hypot(x - FARM_C.x, y - FARM_C.y) > FARM_R - 18) return true; const b = { x: x - w / 2, y: y - h / 2, w, h }; for (let i = 0; i < W.obs.length; i++) { const o = W.obs[i]; if (o.nosolid) continue; if (o.x > b.x + b.w + 4 || o.x + o.w < b.x - 4) continue; if (overlap(b, hbOf(o))) return true; } for (let i = 0; i < W.props.length; i++) { const p = W.props[i]; if (!TREEHB[p.type] || p.x > b.x + b.w + 4 || p.x + p.w < b.x - 4) continue; if (overlap(b, propHb(p))) return true; } return false; }
+var FLATOBS = { fieldbed: 1, pond: 1, dockSign: 0 };
 function worldSortedDraw(dr) {
   const cx = camera.x, cy = camera.y;
   W.obs.forEach((o) => { if (FLATOBS[o.type]) return; if (o.x - cx > VIEW_W + 60 || o.x + o.w - cx < -60 || o.y - cy > VIEW_H + 80 || o.y + o.h - cy < -80) return; dr.push({ y: o.y + o.h - 1, f: () => { softShadow(o.x + o.w / 2 - camera.x, o.y + o.h - camera.y - 2, o.w * (o.type === "fence" || o.type === "sign" ? .2 : .52), Math.min(18, 5 + o.h * .1), o.type); drawObstacle(o, camera.x, camera.y); } }); });
@@ -1707,9 +1710,11 @@ function giveReward(r) {
 }
 function rewardText(r) { const a = []; Object.keys(r).forEach((k) => { if (k === "item") a.push(r.item); else if (k === "amulet") a.push("um amuleto"); else if (RES[k]) a.push("+" + r[k] + " " + RES[k].ic); }); return a.join(" · "); }
 function npcTalkHook(n) {
+  if (n.special === "chefe_mina") { mineOpenPanel(); return true; }
   const id = n.id || n.nome; if (typeof famTalk === "function" && famTalk(n)) return true;
   if (X.talkDay[id] !== X.day) { X.talkDay[id] = X.day; X.friend[id] = Math.min(100, (X.friend[id] || 0) + 4); }
   const f = X.friend[id] || 0;
+  if (typeof pqTalk === "function" && pqTalk(n)) return true; if (n.special === "cc" && ccTalk(n)) return true;
   if (n.special === "estaleiro") { openShop("estaleiro"); return true; }
   if (n.special === "felino") { openShop("felino"); return true; }
   if (n.special === "marceneiro") { openShop("marceneiro"); return true; }
@@ -1857,8 +1862,8 @@ function renderSpace() {
 // ---------------- planetas ----------------
 function blockedPl(x, y, w, h) { if (x < 20 || y < 20 || x > PL.w - 20 || y > PL.h - 20) return true; const b = { x: x - w / 2, y: y - h / 2, w, h }; for (let i = 0; i < PL.obs.length; i++) { const o = PL.obs[i]; if (!o.nosolid && overlap(b, o.type === "structdoor" ? o : { x: o.x + o.w * .1, y: o.y + o.h * .4, w: o.w * .8, h: o.h * .6 })) return true; } return false; }
 function plFree(pl, x, y, m) { if (dist(x, y, pl.pad.x, pl.pad.y) < 170 || dist(x, y, pl.site.x, pl.site.y) < 380) return false; if (BODIES[pl.id].tourist && dist(x, y, 640, 850) < 330) return false; for (let i = 0; i < pl.obs.length; i++) { const o = pl.obs[i]; if (x > o.x - m && x < o.x + o.w + m && y > o.y - m && y < o.y + o.h + m) return false; } return true; }
-function genPlanet(id) {
-  const B = BODIES[id], w = 2400, h = 1700, cols = Math.floor(w / TS), rows = Math.floor(h / TS); seedRnd(B.seed * 977);
+function genPlanet0(id) {
+  const B = BODIES[id], w = 2400, h = 1700, cols = Math.floor(w / TS), rows = Math.floor(h / TS); seedRnd(B.seed * 977 + wseedOff());
   const pl = { id, w, h, cols, rows, grid: [], obs: [], nodes: [], enemies: [], npcs: [], lava: [], props: [], pad: { x: 260, y: 850 }, site: { x: 1250, y: 850 }, colonists: [] }, lat = [];
   for (let j = 0; j < 9; j++) { lat.push([]); for (let i = 0; i < 11; i++) lat[j].push(rnd()); }
   for (let y = 0; y < rows; y++) { pl.grid.push([]); for (let x = 0; x < cols; x++) { const fx = x / cols * 10, fy = y / rows * 8, i0 = Math.floor(fx), j0 = Math.floor(fy), tx = fx - i0, ty = fy - j0, v = lat[j0][i0] * (1 - tx) * (1 - ty) + lat[j0][i0 + 1] * tx * (1 - ty) + lat[j0 + 1][i0] * (1 - tx) * ty + lat[j0 + 1][i0 + 1] * tx * ty; let bi = v < .38 ? 1 : v > .66 ? 2 : 0; if (B.tourist && dist(x * TS, y * TS, 640, 850) < 300) bi = 2; if (dist(x * TS, y * TS, pl.pad.x, pl.pad.y) < 110) bi = 2; pl.grid[y].push(bi); } }
@@ -1873,7 +1878,7 @@ function genPlanet(id) {
   placeStructs(pl, B);
   return pl;
 }
-function enterPlanet(id) {
+function enterPlanet0(id) {
   const B = BODIES[id]; if (!PLs[id]) PLs[id] = genPlanet(id); PL = PLs[id]; scene = "planet"; X.visited[id] = 1; X.boatOn = false; P.swim = false; P.x = PL.pad.x + 70; P.y = PL.pad.y + 10; cat.x = P.x - 24; cat.y = P.y; effects = []; projectiles = []; hazards = []; decoy = null;
   const c = X.colonies[id]; let msg = "🪐 " + B.nome + " — " + B.desc; if (B.haz.length) msg += " Perigos: " + B.haz.map((h) => HAZ_TXT[h]).join(", ") + ".";
   if (c && c.b.some((b) => b.t === "porto") && c.pow > 0) { X.fuel = fuelMax(); X.hull = Math.min(100, X.hull + 30); msg += " ⛽ Porto Espacial reabasteceu a nave!"; } toast(msg, 6000); syncColonists();
@@ -1898,7 +1903,7 @@ function updatePlanet(dt) { if (edge("gift")) giftNear(PL.npcs);
   camera.x = clamp(P.x - VIEW_W / 2, 0, PL.w - VIEW_W); camera.y = clamp(P.y - VIEW_H / 2, 0, PL.h - VIEW_H); setHint(planetHint());
 }
 function planetNpcStep(n, dt) { n.pT -= dt; if (n.pT <= 0) { n.pT = 2 + Math.random() * 3; n.pDir = Math.random() < .4 ? null : Math.random() * 6.28; } let mx = 0, my = 0; const hd = dist(n.hx, n.hy, n.x, n.y); if (hd > n.r) { mx = (n.hx - n.x) / hd; my = (n.hy - n.y) / hd; } else if (n.pDir != null) { mx = Math.cos(n.pDir); my = Math.sin(n.pDir); } const nx = n.x + mx * (n.spd || 22) * dt, ny = n.y + my * (n.spd || 22) * dt; if (!blockedPl(nx, ny, 16, 16)) { n.x = nx; n.y = ny; } if (mx || my) n.face = faceOf(mx, my, n.face); }
-function planetHint() {
+function planetHint0() {
   const sh = structHint(); if (sh) return sh;
   const n = nearestOf(PL.npcs, P.x, P.y, 62); if (n) return "[F] Conversar com " + n.nome + heartStr(n) + (n.req && !X.reqDone[n.id] ? " ❗" : "");
   const c = nearestOf(PL.colonists, P.x, P.y, 50); if (c) return "[F] Conversar com " + c.nome + " (" + c.job + ")";
@@ -1908,7 +1913,7 @@ function planetHint() {
   if (dist(P.x, P.y, PL.site.x, PL.site.y) < 120) return X.colonies[PL.id] ? "[F] Painel da Colônia · [B] Construir" : "[F] Marco de Fundação: fundar colônia";
   return X.colonies[PL.id] && dist(P.x, P.y, PL.site.x, PL.site.y) < 260 ? "[B] Menu de construção da colônia" : "";
 }
-function planetInteract() {
+function planetInteract0() {
   const sn = nearStruct(); if (sn) { enterStruct(sn); return; }
   const n = nearestOf(PL.npcs, P.x, P.y, 62); if (n) { talkNPC(n); return; }
   const c = nearestOf(PL.colonists, P.x, P.y, 50); if (c) { talkColonist(c); return; }
@@ -1918,7 +1923,7 @@ function planetInteract() {
   if (dist(P.x, P.y, PL.site.x, PL.site.y) < 120) { openX("colony"); return; }
 }
 const PLG = { lava: null };
-function renderPlanet() {
+function renderPlanet0() {
   const g = ctx, B = BODIES[PL.id], x0 = Math.floor(camera.x / TS), y0 = Math.floor(camera.y / TS); g.fillStyle = "#000"; g.fillRect(0, 0, VIEW_W, VIEW_H);
   for (let ty = y0; ty <= y0 + 17; ty++) for (let tx = x0; tx <= x0 + 26; tx++) { if (tx < 0 || ty < 0 || tx >= PL.cols || ty >= PL.rows) continue; const h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0, bi = PL.grid[ty][tx], sx = tx * TS - camera.x, sy = ty * TS - camera.y; g.fillStyle = B.pal[bi][h % 3]; g.fillRect(sx, sy, TS, TS); if (h % 11 === 0) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(sx + 6, sy + 9, 5, 4); } if (h % 23 === 0) { g.fillStyle = "rgba(255,255,255,.12)"; g.fillRect(sx + 14, sy + 12, 4, 3); } if (B.tourist && bi === 2 && (tx + ty) % 2 === 0) { g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(sx, sy, TS, TS); } }
   PL.lava.forEach((l) => { const sx = l.x - camera.x, sy = l.y - camera.y; if (sx + l.w < -20 || sx > VIEW_W + 20 || sy + l.h < -20 || sy > VIEW_H + 20) return; g.save(); g.fillStyle = "#7a1f10"; g.fillRect(sx, sy, l.w, l.h); g.globalAlpha = .75 + .2 * Math.sin(Date.now() / 300); g.fillStyle = "#ff5a2d"; const nn = Math.ceil(l.w / 34); for (let i = 0; i < nn; i++) { g.beginPath(); g.arc(sx + (i + .5) * (l.w / nn), sy + l.h / 2 + Math.sin(Date.now() / 400 + i) * 6, 8, 0, 6.283); g.fill(); } g.restore(); });
@@ -2385,7 +2390,7 @@ function giveTest() {
   giveTestExtra();
   toast("🧪 Modo Teste: tudo no máximo e desbloqueado (recursos, ouro, foguete 5 estágios, trajes, sistemas, colônia nv.6, itens, gatos nv.5).", 5000);
 }
-function startHookX() { ensureX(); if (X.testMode) giveTest(); saveGame(); }
+function startHookX() { ensureX(); if (typeof worldNewApply === "function") worldNewApply(); if (X.testMode) giveTest(); saveGame(); }
 function initX() {
   ensureX(); const st = $("overlay-start"), sub = st.querySelector(".subtitle"); if (sub) sub.textContent = "Protótipo v5 — Ilhas, Foguetes, Espaço e Colônias";
   const bl = st.querySelector(".blurb"); if (bl) bl.textContent += " NOVO: compre um barco, navegue entre ilhas, monte seu foguete no Cosmódromo, viaje a 5 corpos celestes e funde colônias com colonos, energia, comida e rotas de suprimento.";
@@ -2394,7 +2399,7 @@ function initX() {
   if (hasSave()) { const lb = document.createElement("button"); lb.textContent = saveLabel(); lb.addEventListener("click", () => { loadGame(); }); row.appendChild(lb); } st.appendChild(row);
   const lg = document.querySelector("#controlsPanel .legendBox"), cb = $("closeControls"); [["Barco: embarcar/desembarcar · Construir (na colônia)", "B"], ["Carta náutica / Mapa estelar", "M"], ["Painel de Comando (recursos, foguete, colônias)", "K"], ["No espaço: mover / atirar / pousar", "WASD · Espaço · F"]].forEach((r) => { const d = document.createElement("div"); d.className = "legendRow"; d.innerHTML = "<span>" + r[0] + '</span><span class="key">' + r[1] + "</span>"; lg.insertBefore(d, cb); });
   const cr = document.querySelector(".credit"); if (cr) cr.textContent = "PINSCHERVERSE v5 — HTML5 Canvas + JavaScript puro · ilhas, foguetes e colônias";
-  window.PV = { MP, mpNewInvite, mpAnswerInvite, mpAcceptAnswer, mpSendChat, mpEmbark, mpSetLeader, mpEmote, locKey, saveGame: (m) => saveGame(m), getGold: () => gold, setGold: (n) => { gold = n; }, FAM: () => FAM(), famMarry, famBaby, famBorn, famRegAll, famEnterFarm, famExitFarm, famTick, famClick, FARM_PAD, exitH: () => exitHouse(), biomeAt: (x, y) => biomeAt(x, y), exitI: () => exitInterior(), BODIES, exitD: () => exitDungeon(), enterStruct: (i) => enterStruct(PL.structs[i || 0]), nearStruct, getD: () => D, killAll: () => { D.enemies.forEach((e) => { if (!e.dead) killEnemy(e); }); }, doJump: (i) => doJump(i), setSystem: (i) => setSystem(i), curSys, SYSTEMS, drawGalaxy, evUpdate: (d) => evUpdate(d), ACH, achTick: () => { _aT = 9; achTick(0); }, getW: () => W, getP: () => P, getSPC: () => SPC, merchPos, ui: () => ui, openX, closeX, launchRocket, landOn, enterPlanet, enterSpace, foundColony, buildAt, colonyCycle, runRoutes, giveTest, X, S: () => ({ scene, PL, SPC }), test: giveTest, tp(w) { const T = { estaleiro: [ISLAND.x1 - 120, Math.round(1090 * WK)], coral: [6270, 1540], gelo: [6870, 3840], cosmo: [3760, 5340], vila: [Math.round(900 * WK), Math.round(420 * WK)] }[w]; if (T) { P.x = T[0]; P.y = T[1]; scene = "world"; X.boatOn = false; } }, rocket() { PARTS.slice(0, 4).forEach((p) => { X.rocket[p.id] = 1; }); }, cycle() { X.cycleT = CYCLE; } };
+  window.PV = { blkP: (x, y) => blockedWorldX(x, y, P.w, P.h), blk: (x, y) => blockedWorldX(x, y, 18, 18), MP, mpNewInvite, mpAnswerInvite, mpAcceptAnswer, mpSendChat, mpEmbark, mpSetLeader, mpEmote, locKey, saveGame: (m) => saveGame(m), getGold: () => gold, setGold: (n) => { gold = n; }, FAM: () => FAM(), famMarry, famBaby, famBorn, famRegAll, famEnterFarm, famExitFarm, famTick, famClick, FARM_PAD, exitH: () => exitHouse(), biomeAt: (x, y) => biomeAt(x, y), exitI: () => exitInterior(), BODIES, exitD: () => exitDungeon(), enterStruct: (i) => enterStruct(PL.structs[i || 0]), nearStruct, getD: () => D, killAll: () => { D.enemies.forEach((e) => { if (!e.dead) killEnemy(e); }); }, doJump: (i) => doJump(i), setSystem: (i) => setSystem(i), curSys, SYSTEMS, drawGalaxy, evUpdate: (d) => evUpdate(d), ACH, achTick: () => { _aT = 9; achTick(0); }, getW: () => W, getP: () => P, getSPC: () => SPC, merchPos, ui: () => ui, openX, closeX, launchRocket, landOn, enterPlanet, enterSpace, foundColony, buildAt, colonyCycle, runRoutes, giveTest, X, S: () => ({ scene, PL, SPC }), test: giveTest, tp(w) { const T = { estaleiro: [ISLAND.x1 - 120, Math.round(1090 * WK)], coral: [6270, 1540], gelo: [6870, 3840], cosmo: [3760, 5340], vila: [Math.round(900 * WK), Math.round(420 * WK)] }[w]; if (T) { P.x = T[0]; P.y = T[1]; scene = "world"; X.boatOn = false; } }, rocket() { PARTS.slice(0, 4).forEach((p) => { X.rocket[p.id] = 1; }); }, cycle() { X.cycleT = CYCLE; } };
 }
 
 // ============================================================
@@ -2458,11 +2463,7 @@ function plotsSoilDraw() { const g = ctx; W.plots.forEach((p) => { const sx = p.
 function extraWorldDraw(dr) {
   if (X.farmIn) famWorldDraw(dr);
   mpDrawInto(dr);
-  W.plots.forEach((p) => { if (!p.type) return; dr.push({ y: p.y + 34, f: () => { const sx = p.x - camera.x, sy = p.y - camera.y; if (sx < -50 || sx > VIEW_W + 50 || sy < -50 || sy > VIEW_H + 50) return; const g = ctx, c = CROPS[p.type], k = Math.min(1, p.g / c.need), t = Date.now(); g.save(); g.fillStyle = "rgba(0,0,0,.18)"; g.beginPath(); g.ellipse(sx + 20, sy + 34, 8 + k * 6, 3, 0, 0, 6.283); g.fill();
-    const col = p.type === "flor" ? "#f080c0" : p.type === "cogumelo" ? "#c8a0e8" : "#e08a3a";
-    if (k >= 1) { g.fillStyle = "#3f8f35"; g.fillRect(sx + 18, sy + 14, 4, 20); g.beginPath(); g.ellipse(sx + 12, sy + 26, 7, 3, -.5, 0, 6.283); g.ellipse(sx + 28, sy + 26, 7, 3, .5, 0, 6.283); g.fill(); g.fillStyle = col; g.beginPath(); g.arc(sx + 20, sy + 12 + Math.sin(t / 250) * 1.5, 9, 0, 6.283); g.fill(); g.fillStyle = "rgba(255,255,255,.35)"; g.beginPath(); g.arc(sx + 17, sy + 9, 3, 0, 6.283); g.fill(); g.fillStyle = "#fff"; g.font = "bold 10px sans-serif"; g.textAlign = "center"; g.fillText("!", sx + 20, sy - 4 + Math.sin(t / 200) * 2); }
-    else { g.fillStyle = "#4a9a3a"; g.fillRect(sx + 18, sy + 32 - k * 20, 4, 4 + k * 20); g.beginPath(); g.ellipse(sx + 14, sy + 30 - k * 12, 3 + k * 4, 2 + k * 2, -.6, 0, 6.283); g.ellipse(sx + 26, sy + 30 - k * 12, 3 + k * 4, 2 + k * 2, .6, 0, 6.283); g.fill(); g.beginPath(); g.arc(sx + 20, sy + 30 - k * 20, 2 + k * 4, 0, 6.283); g.fill(); }
-    g.restore(); } }); });
+  farmCropsDraw(dr);
   W.fish.forEach((s) => { const sx = s.x - camera.x, sy = s.y - camera.y; if (sx < -30 || sx > VIEW_W + 30 || sy < -30 || sy > VIEW_H + 30) return; const g = ctx, t = Date.now() / 400; g.save(); g.strokeStyle = "rgba(255,255,255,.7)"; g.lineWidth = 2; for (let i = 0; i < 2; i++) { g.globalAlpha = .7 - ((t + i * .5) % 1) * .6; g.beginPath(); g.arc(sx, sy, 6 + ((t + i * .5) % 1) * 14, 0, 6.283); g.stroke(); } g.restore(); });
 }
 // ---------------- pesca ----------------
@@ -2537,7 +2538,7 @@ function xExtra(a, v) {
   if (a === "negro") { const n = NEGRO.find((q) => q.id === v); if (rs("fragmento") < n.cost) return true; radd("fragmento", -n.cost); if (v === "holo") X.holo = true; else if (v === "aura") X.aura = true; else if (v === "mount") P.mount = true; else if (v === "recipe") X.recipe = true; else if (v === "fuel") X.fuel = fuelMax(); else { ["titanio", "plasma", "circuito", "cristal_gelo"].forEach((k) => radd(k, 3)); } toast("🛸 Compra feita: " + n.nome, 2400); return true; }
   return false;
 }
-function buyExtra(id) {
+function buyExtra0(id) {
   if (id === "sem_raiz") { X.seed.raiz += 3; toast("🌱 +3 sementes de Raiz-Doce", 1600); } else if (id === "sem_cogu") { X.seed.cogumelo += 3; toast("🌱 +3 sementes de Cogumelo Lunar", 1600); } else if (id === "sem_flor") { X.seed.flor += 3; toast("🌱 +3 sementes de Flor de Mana", 1600); } else return false; return true;
 }
 function drawAura(x, y) { const g = ctx, t = Date.now() / 600; g.save(); for (let i = 0; i < 7; i++) { const a = t + i * .9, k = (t * .7 + i * .37) % 1; g.globalAlpha = (1 - k) * .45; g.fillStyle = "#a77bf0"; g.beginPath(); g.arc(x + Math.cos(a) * (10 + i), y - 6 - k * 34, 5 - k * 3, 0, 6.283); g.fill(); } g.restore(); }
@@ -2792,27 +2793,28 @@ function layoutFarmVila(Wd) {
   // estrada Vila ↔ Fazenda
   Wd.roads.push([[1480, 600], [1260, 640], [1040, 660], [860, 640]], [[860, 640], [800, 520], [760, 440]]);
 }
+function shiftObj(o, dx, dy) { o.x += dx; o.y += dy; if (o.hdoor) { o.hdoor.x += dx; o.hdoor.y += dy; } if (o.door && !o.hdoor) { o.door.x += dx; o.door.y += dy; } if (o.hx !== undefined) { o.hx += dx; o.hy += dy; } }
 function buildFarm(Wd) {
   const O = (x, y, w, h, type, ex) => { const o = Object.assign({ x, y, w, h, type }, ex || {}); Wd.obs.push(o); return o; };
-  Wd.plots = []; for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) Wd.plots.push({ x: 700 + i * 48, y: 520 + j * 48, type: null, g: 0, w: 0 });
-  O(700 - 14, 520 - 14, 4 * 48 + 20, 4 * 48 + 20, "fieldbed", { nosolid: true });
+  const o0 = Wd.obs.length, n0 = Wd.npcs.length;
+  Wd.plots = []; for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) Wd.plots.push({ x: 700 + i * 48, y: 520 + j * 48, type: null, g: 0, w: 0, tier: 0 });
+  [[1, 4, 6, 0, 4], [2, 0, 6, 4, 6], [3, 6, 8, 0, 6]].forEach((t) => { for (let j = t[3]; j < t[4]; j++) for (let i = (t[0] === 2 ? 0 : t[1]); i < (t[0] === 2 ? 6 : t[2]); i++) Wd.plots.push({ x: 700 + i * 48, y: 520 + j * 48, type: null, g: 0, w: 0, tier: t[0] }); });
   O(430, 230, 160, 124, "home", { hdoor: { x: 430 + 62, y: 230 + 118, w: 36, h: 20 } });
   O(610, 332, 40, 38, "bin"); O(560, 520, 44, 50, "well"); O(398, 372, 26, 44, "mailbox");
-  O(870, 560, 36, 54, "scarecrow", { nosolid: true });
+  O(1100, 530, 36, 54, "scarecrow", { nosolid: true });
   O(880, 250, 190, 130, "barn"); O(930, 392, 44, 38, "chestbox", { chest: "farm" });
   O(340, 700, 240, 130, "pond");
-  [[686, 506, 230, 10], [686, 722, 230, 10]].forEach((a) => O(a[0], a[1], a[2], a[3], "fence", { nosolid: true }));
-  O(1200, 740, 70, 70, "sign", { nosolid: true, label: "← FAZENDA | VILA →" }); O(1560, 800, 70, 50, "sign", { nosolid: true, label: "↑ VILA TRIBAL" });
-  O(1400, 720, 96, 62, "stall");
-  Wd.npcs.push(
-    mkNPC({ id: "jardineira", nome: "Jardineira Tribal", main: "#a8c06a", dark: "#5a7a3a", collar: "#c9455a", hat: "#d9c48a", x: 660, y: 620, r: 40, lines: ["Regue cedo! Planta sedenta não cresce.", "A Flor de Mana vale ouro nos mercados.", "Semente boa vem do Armazém Tribal, na Vila."], lines2: ["Sua fazenda está ficando linda!"], gift: ["raiz", 3] }),
-    mkNPC({ id: "marceneiro", nome: "Marceneiro Cepo", main: "#9a6a3a", dark: "#5a3a1a", collar: "#e8b84b", hat: "#d9c48a", x: 1448, y: 806, r: 30, special: "marceneiro", lines: ["Móveis, baús e ampliações! Sua casa merece conforto.", "Uma cama boa vale mais que mil petiscos."], lines2: ["Faço a madeira cantar. E o preço, também."] }),
-    mkNPC({ id: "anciao", nome: "Anciã Contadora", main: "#bfb8a8", dark: "#7a7466", collar: "#8a5ac9", hat: "#8a5ac9", x: 1560, y: 600, r: 30, special: "lore", lines: ["Sente-se, pequeno. Há histórias mais velhas que o Osso.", "Cada estrela é um latido do Grande Cão."], lines2: ["Você carrega o olhar da sua avó."] }));
-  Wd.fish = Wd.fish || []; Wd.fish.push({ x: 460, y: 840, kind: "coast" }, { x: 560, y: 840, kind: "coast" });
-  for (let i = 0; i < 16; i++) { const a = [[300, 260], [320, 460], [340, 620], [1080, 300], [1100, 480], [1120, 640], [760, 240], [1000, 200], [360, 140], [1130, 140], [300, 940], [680, 940], [1000, 900], [1150, 820], [820, 860], [260, 520]][i]; Wd.props.push(mkProp({ id: "ft" + i, type: i % 3 ? "tree_fruit" : "tree_pine", x: a[0], y: a[1], w: 48, h: 60, chance: .35 })); }
+  Wd.npcs.push(mkNPC({ id: "jardineira", nome: "Jardineira Tribal", main: "#a8c06a", dark: "#5a7a3a", collar: "#c9455a", hat: "#d9c48a", x: 660, y: 620, r: 40, lines: ["Regue cedo! Planta sedenta não cresce.", "A Flor de Mana vale ouro nos mercados.", "Semente boa vem do Armazém Tribal, na Vila."], lines2: ["Sua fazenda está ficando linda!"], gift: ["raiz", 3] }));
+  Wd.fish = Wd.fish || []; const f0 = Wd.fish.length; Wd.fish.push({ x: 460, y: 840, kind: "coast" }, { x: 560, y: 840, kind: "coast" });
+  const p0 = Wd.props.length; for (let i = 0; i < 16; i++) { const a = [[300, 260], [320, 460], [340, 620], [1080, 300], [1100, 480], [1120, 640], [760, 240], [1000, 200], [360, 140], [1130, 140], [300, 940], [680, 940], [1000, 900], [1150, 820], [820, 860], [260, 520]][i]; Wd.props.push(mkProp({ id: "ft" + i, type: i % 3 ? "tree_fruit" : "tree_pine", x: a[0], y: a[1], w: 48, h: 60, chance: .35 })); }
+  // tudo o que é da fazenda vai para o Vale Lareira (ilha à parte)
+  for (let i = o0; i < Wd.obs.length; i++) shiftObj(Wd.obs[i], FDX, FDY); for (let i = n0; i < Wd.npcs.length; i++) shiftObj(Wd.npcs[i], FDX, FDY);
+  for (let i = f0; i < Wd.fish.length; i++) { Wd.fish[i].x += FDX; Wd.fish[i].y += FDY; } for (let i = p0; i < Wd.props.length; i++) shiftObj(Wd.props[i], FDX, FDY);
+  Wd.plots.forEach((q) => { q.x += FDX; q.y += FDY; });
+  buildVale(Wd); buildVillage2(Wd); buildCC(Wd);
 }
 function homeDoorHit() { const o = W.obs.find((q) => q.type === "home"); return o && P.x > o.hdoor.x && P.x < o.hdoor.x + o.hdoor.w && P.y > o.hdoor.y && P.y < o.hdoor.y + o.hdoor.h; }
-function farmInteract() {
+function farmInteract0() {
   const nb = (t, r) => W.obs.find((o) => o.type === t && rdist(o) < (r || 56)); let o;
   if ((o = nb("bin"))) { sellAll(); return true; } if ((o = nb("mailbox"))) { mailInteract(); return true; } if ((o = nb("chestbox", 70))) { openChest("farm"); return true; }
   if ((o = nb("well"))) { P.hp = P.hpMax; toast("💧 Você bebeu água fresca do poço. Vida restaurada!", 2200); W.plots.forEach((p) => { if (p.type && p.w < 40) p.w = 100; }); return true; }
@@ -2820,7 +2822,7 @@ function farmInteract() {
   if ((o = nb("stall", 70))) return false; if ((o = nb("home", 50)) && !homeDoorHit()) { toast("A porta fica na frente da casa (embaixo).", 1800); return true; }
   return false;
 }
-function farmHint() {
+function farmHint0() {
   const nb = (t, r) => W.obs.find((o) => o.type === t && rdist(o) < (r || 56));
   if (nb("bin")) return "[F] Caixa de Venda: vender colheitas e peixes"; if (nb("mailbox")) return "[F] Caixa de Correio" + (mailUnread() ? " ✉ (nova carta!)" : ""); if (nb("chestbox", 70)) return "[F] Baú do Celeiro (armazenamento)";
   if (nb("well")) return "[F] Beber do poço (cura e rega)"; if (nb("home", 90)) return "Entre pela porta da casa (embaixo)"; return "";
@@ -2851,7 +2853,7 @@ Object.assign(NEWOBS, {
   pond(g, o, sx, sy) { g.fillStyle = "#6a5a3a"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h / 2, o.w / 2 + 6, o.h / 2 + 6, 0, 0, 6.283); g.fill(); g.fillStyle = "#2a82b8"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h / 2, o.w / 2, o.h / 2, 0, 0, 6.283); g.fill(); g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 2; const t = Date.now() / 900; for (let i = 0; i < 3; i++) { g.beginPath(); g.ellipse(sx + o.w * (.3 + i * .2), sy + o.h * .5 + Math.sin(t + i) * 6, 14 + i * 4, 5, 0, 0, 6.283); g.stroke(); } g.fillStyle = "#4a9a4a"; g.beginPath(); g.arc(sx + o.w * .78, sy + o.h * .3, 9, 0, 6.283); g.arc(sx + o.w * .2, sy + o.h * .7, 7, 0, 6.283); g.fill(); },
   fence(g, o, sx, sy) { g.fillStyle = "#8a5a34"; g.fillRect(sx, sy + 2, o.w, 3); g.fillRect(sx, sy + 7, o.w, 3); for (let x = 0; x <= o.w; x += 22) g.fillRect(sx + x, sy - 4, 4, 16); },
   sign(g, o, sx, sy) { g.fillStyle = "#5c3a1f"; g.fillRect(sx + o.w / 2 - 3, sy + 20, 6, o.h - 20); g.fillStyle = "#8a5a34"; g.fillRect(sx - 20, sy, o.w + 40, 24); g.strokeStyle = "#3a2410"; g.strokeRect(sx - 19.5, sy + .5, o.w + 39, 23); g.fillStyle = "#f3ead9"; g.font = "bold 8px monospace"; g.textAlign = "center"; g.fillText(o.label || "", sx + o.w / 2, sy + 15); },
-  stall(g, o, sx, sy) { g.fillStyle = "rgba(8,6,5,.25)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h, o.w * .55, 8, 0, 0, 6.283); g.fill(); g.fillStyle = "#6b4a2f"; g.fillRect(sx + 4, sy + 24, o.w - 8, o.h - 24); g.fillStyle = "#c9455a"; for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? "#f3ead9" : "#c9455a"; g.fillRect(sx + i * (o.w / 6), sy + 4, o.w / 6, 20); } g.fillStyle = "#e8b84b"; g.fillRect(sx + 14, sy + 34, 14, 14); g.fillRect(sx + 38, sy + 34, 14, 10); g.fillStyle = "#f3ead9"; g.font = "bold 8px monospace"; g.textAlign = "center"; g.fillText("MARCENARIA", sx + o.w / 2, sy + o.h + 12); },
+  stall(g, o, sx, sy) { g.fillStyle = "rgba(8,6,5,.25)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h, o.w * .55, 8, 0, 0, 6.283); g.fill(); g.fillStyle = "#6b4a2f"; g.fillRect(sx + 4, sy + 24, o.w - 8, o.h - 24); g.fillStyle = "#c9455a"; for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? "#f3ead9" : "#c9455a"; g.fillRect(sx + i * (o.w / 6), sy + 4, o.w / 6, 20); } g.fillStyle = "#e8b84b"; g.fillRect(sx + 14, sy + 34, 14, 14); g.fillRect(sx + 38, sy + 34, 14, 10); g.fillStyle = "#f3ead9"; g.font = "bold 8px monospace"; g.textAlign = "center"; g.fillText((o.stallLabel || "MARCENARIA"), sx + o.w / 2, sy + o.h + 12); },
 });
 // ============================================================
 //   A CASA — interior editável
@@ -3113,7 +3115,7 @@ function drawCut() {
 }
 
 // ---------------- banners de região ----------------
-const ZONES = { farm: ["Fazenda Lareira", "O lar que a Vovó deixou"], village: ["Vila Tribal", "Onde as histórias são guardadas"], neon: ["Cidade Neon", "Circuitos, drones e gente apressada"], forest: ["Floresta Sussurrante", "As árvores ouvem tudo"], volcano: ["Zona Vulcânica", "O chão lembra do fogo"], cemetery: ["Cemitério Silente", "Aqui, até o vento late baixinho"] };
+const ZONES = { farm: ["Vale Lareira", "O lar que a Vovó deixou"], village: ["Vila Tribal", "Onde as histórias são guardadas"], neon: ["Cidade Neon", "Circuitos, drones e gente apressada"], forest: ["Floresta Sussurrante", "As árvores ouvem tudo"], volcano: ["Zona Vulcânica", "O chão lembra do fogo"], cemetery: ["Cemitério Silente", "Aqui, até o vento late baixinho"] };
 let BAN = null, lastB = "", _bT = { b: "", t: 0 };
 function showBanner(t, sub) { BAN = { t, sub, t0: Date.now() }; }
 function drawBanner() {
@@ -3150,7 +3152,7 @@ const LORE = [
   { id: "megacao", t: "O Mega-Cão Alfa", b: "Um satélite-guardião construído por Vovó para vigiar a órbita. O Sinal o corrompeu: passou a tratar todo foguete como ameaça. Não era vilão. Era um cão fiel que obedeceu a uma ordem velha demais.", c: () => X.bossDown },
   { id: "caomaior", t: "Cão Maior", b: "O sistema de onde vem o Sinal: três sóis de luz azulada e mundos que nenhum pinscher jamais viu. Lá vive a Matilha Perdida, que partiu há gerações e não soube voltar. Vovó foi ajudá-los. Agora cabe a você.", c: () => X.bossDown },
 ];
-function objective() {
+function objective0() {
   const s = ST(); if (!s.seen.intro) return "Capítulo I — A Herança: explore a Fazenda.";
   if (!s.mail[1]) return "Capítulo I — A Herança: leia a carta da Vovó na Caixa de Correio da Fazenda.";
   if (Q.stage < 6) return "Capítulo II — Os Três Amuletos · " + questTextBase().replace(/^Missão: /, "");
@@ -3161,7 +3163,7 @@ function objective() {
   if ((X.mapfrag || 0) < 3) return "Capítulo VII — Os Três Fragmentos: explore as estruturas dos planetas (Templo, Caverna, Necrópole) e derrote seus guardiões · " + (X.mapfrag || 0) + "/3";
   return "Capítulo VIII — Andrômeda: com o mapa completo, viaje à galáxia vizinha e encontre a Estação Pinscher Abandonada.";
 }
-function tabLore() {
+function tabLore0() {
   const s = ST(); let h = "<div class='card' style='margin-bottom:8px'><h4>📌 Objetivo atual</h4><p>" + objective() + "</p></div>";
   const got = LORE.filter((l) => s.codex[l.id]);
   h += "<h3 style='color:var(--gold)'>📖 Códice (" + got.length + "/" + LORE.length + ")</h3>";
@@ -3205,8 +3207,8 @@ function introSteps() {
     { bars: 1, fade: [1, 0], cam: [1700, 440], cd: .01 }, { title: "PINSCHERVERSE", sub: "A Herança da Vovó Estelária", d: 3.6 }, { title: null, d: .2 }, { fade: [0, 2.4] },
     sy("", "Dizem que, antes do primeiro latido, o universo era um silêncio escuro e sem cheiro."),
     sy("", "Então os Primeiros Cães enterraram um osso gigantesco no céu — e ele queimou até virar o Sol.", { cam: [1300, 430], cd: 3.5 }),
-    sy("", "Sob ele nasceram uma Vila de tribos, uma Cidade de neon, florestas que sussurram… e uma pequena fazenda que ninguém queria.", { cam: [800, 380], cd: 3.5 }),
-    sy("", "Até hoje.", { cam: [500, 340], cd: 3 }),
+    sy("", "Sob ele nasceram uma Vila de tribos, uma Cidade de neon, florestas que sussurram… e uma pequena fazenda que ninguém queria.", { cam: [5600, 400], cd: 3.5 }),
+    sy("", "Até hoje.", { cam: [5420, 360], cd: 3 }),
     sy("Vovó", "(voz gravada) Se você está ouvindo isto, filhote, a Fazenda Lareira finalmente é sua. Desculpe a bagunça. E o buraco no telhado."),
     sy("Vovó", "Eu precisei partir atrás de um som. Um uivo que só alguns de nós conseguem ouvir. Eu o chamo de… o Sinal."),
     sy("Vovó", "Plante, pesque, explore. Fale com o Pajé na Vila — ele guarda nossas histórias. E leia as cartas na Caixa de Correio: sempre escrevo para você."),
@@ -3658,13 +3660,14 @@ function coastIn(x, y) {
 }
 function biomeAt(x, y) {
   const _i = islandBiome(x, y); if (_i) return _i;
-  const c = coastIn(x, y); if (c <= 0) return "ocean"; if (c < 70) return "beach";
+  if (x > 4600 && VALE) { const vd = valeD(x, y); if (vd > 0) return riverAt(x, y) ? "river" : vd < 70 ? "beach" : "farm"; }
+  const c = coastIn(x, y); if (c <= 0) return "ocean"; if (c < 70) return "beach"; if (riverAt(x, y)) return "river";
   const u = (x + (vnoise(x / 260, y / 260) - .5) * 140) / WK, v = (y + (vnoise(x / 240 + 9, y / 240 + 4) - .5) * 140) / WK;
-  if (v < 700) return u < 730 ? "farm" : u < 1300 ? "village" : "neon";
+  if (v < 700) return u < 1300 ? "village" : "neon";
   if (v < 1400) return "forest";
   return u < 1200 ? "volcano" : "cemetery";
 }
-function oceanDepth(x, y) { let d = Math.max(0, -coastIn(x, y)); for (let i = 0; i < ISLES.length; i++) { const s = ISLES[i], dd = Math.hypot(x - s.x, y - s.y) - s.r * 1.1 - 46; if (dd < d) d = Math.max(0, dd); } return d; }
+function oceanDepth(x, y) { let d = Math.max(0, -coastIn(x, y)); if (x > 4300 && VALE) { const dd = -valeD(x, y); if (dd < d) d = Math.max(0, dd); } for (let i = 0; i < ISLES.length; i++) { const s = ISLES[i], dd = Math.hypot(x - s.x, y - s.y) - s.r * 1.1 - 46; if (dd < d) d = Math.max(0, dd); } return d; }
 
 // ---- sanitizar objetos que ficaram no mar após a nova costa ----
 function sanitizeCoast(Wd) {
@@ -3724,7 +3727,7 @@ function drawGround() {
   const t = Date.now() / 1000, st = 44, i0 = Math.floor(camx / st), j0 = Math.floor(camy / st);
   ctx.save(); ctx.lineWidth = 1.5; ctx.lineCap = "round";
   for (let j = j0; j <= j0 + Math.ceil(VIEW_H / st) + 1; j++) for (let i = i0; i <= i0 + Math.ceil(VIEW_W / st) + 1; i++) {
-    const h = _vh(i, j); if (h > .45) continue; const wx = i * st + h * 40, wy = j * st + _vh(j, i) * 40; if (biomeAt(wx, wy) !== "ocean") continue;
+    const h = _vh(i, j); if (h > .45) continue; const wx = i * st + h * 40, wy = j * st + _vh(j, i) * 40; if (biomeAt(wx, wy) !== "ocean") continue; // (rios: riverFx)
     const a = .5 + .5 * Math.sin(t * 1.3 + h * 40); ctx.strokeStyle = "rgba(255,255,255," + (a * .28).toFixed(2) + ")"; const sx = wx - camx, sy = wy - camy + Math.sin(t + h * 9) * 2; ctx.beginPath(); ctx.moveTo(sx - 8, sy); ctx.quadraticCurveTo(sx - 3, sy - 3, sx, sy); ctx.quadraticCurveTo(sx + 3, sy + 3, sx + 8, sy); ctx.stroke();
   }
   ctx.restore();
@@ -3982,7 +3985,7 @@ function drawCatAt(x, y) { const c = CATS[cat.breed], m = trackMove(cat); drawCr
 // ============================================================
 // pv19: Família (casamento, bebê Pinscher/Gato/Híbrido), Fazenda Orbital, extras do modo teste
 // ============================================================
-const FARM_C = { x: 620, y: 470 }, FARM_R = 400, FARM_PAD = { x: 790, y: 436 };
+const FARM_C = { x: 5680, y: 590 }, FARM_R = 720, FARM_PAD = { x: 5690, y: 436 };
 const FARMMOD_COST = { titanio: 12, plasma: 8, circuito: 6, fragmento: 4 };
 const GATO_RX = /gat[oa]|felin|miau|esfinge|\bcat/i;
 function FAM() { if (!X.fam) X.fam = { reg: {}, spouse: null, kids: [], preg: 0, lastDay: X.day, gone: {}, hint: {} }; return X.fam; }
@@ -4061,7 +4064,7 @@ function famHouseDraw(dr) {
   W.npcs.forEach((n) => { if (n.special === "spouse") { const x = ox + w2 * .7 + Math.sin(t) * 6, y = oy + h2 * .62; dr.push({ y, f: () => drawNPC(n, x, y) }); } else if (n.special === "kid") { const x = ox + w2 * (.36 + i * .09) + Math.sin(t + i) * 10, y = oy + h2 * .66 + Math.cos(t * .8 + i) * 6; i++; dr.push({ y, f: () => drawNPC(n, x, y) }); } });
 }
 // ---------- visual de gato/híbrido ----------
-function npcExtras(n, x, y, face, s) {
+function npcExtras0(n, x, y, face, s) {
   const sp = npcSp(n), g = ctx; if (sp !== "pinscher") {
     const bw = 9 * s, bh = 6 * s, hw = 6 * s, hh = 5 * s, bx = Math.round(x - bw / 2), by = Math.round(y - bh - s), hy = Math.round(by - hh + 2 * s); let hx = Math.round(x - hw / 2); if (face === "left") hx -= s; if (face === "right") hx += s;
     const d = n.dark || "#444", m = n.main || "#aa8"; g.save(); g.lineCap = "round";
@@ -4145,6 +4148,7 @@ function drawFarmStation(g, sx, sy) {
 }
 // ---------- modo teste: tudo ----------
 function giveTestExtra() {
+  try { farmTestAll(); } catch (e) { }
   X.rocket.farmmod = 1; X.farmOrbit = true; X.mapa = true; X.mapfrag = 3; X.holo = true; X.aura = true; X.recipe = true; P.mount = true; Object.keys(X.seed).forEach((k) => { X.seed[k] = 99; });
   try { famRegAll(); } catch (e) { }
   if (X.sysVisited) Object.keys(SYSTEMS).forEach((k) => { X.sysVisited[k] = 1; });
@@ -4153,7 +4157,9 @@ function giveTestExtra() {
 // ============================================================
 // pv20: salvamento completo (v6) — autosave, backup, exportar/importar, estado do mundo/planetas
 // ============================================================
-const SAVE_V6 = "pinscherverse_save_v6", SAVE_BAK = "pinscherverse_save_v6_bak", SAVE_OLD = "pinscherverse_save_v6_old";
+let SAVE_V6 = "pinscherverse_save_v6", SAVE_BAK = "pinscherverse_save_v6_bak", SAVE_OLD = "pinscherverse_save_v6_old", WSLOT = 1;
+function slotKeys(n) { const sf = n > 1 ? "_s" + n : ""; return ["pinscherverse_save_v6" + sf, "pinscherverse_save_v6_bak" + sf, "pinscherverse_save_v6_old" + sf]; }
+function useSlot(n) { WSLOT = n; const k = slotKeys(n); SAVE_V6 = k[0]; SAVE_BAK = k[1]; SAVE_OLD = k[2]; }
 let _wpos = null, _saveInfoCache = null;
 function propKey(p) { return (p.id || p.type) + "@" + Math.round(p.x) + "," + Math.round(p.y); }
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -4164,14 +4170,15 @@ function nodesState(list) { return (list || []).map((n) => [n.left, Math.round((
 function nodesApply(list, st) { if (!st) return; (list || []).forEach((n, i) => { if (st[i]) { n.left = st[i][0]; n.t = st[i][1]; } }); }
 function snapshot() {
   const Xc = Object.assign({}, X); delete Xc.boatOn; delete Xc.farmIn;
-  const planets = {}; Object.keys(PLs).forEach((id) => { const pl = PLs[id]; planets[id] = { props: propsDone(pl.props), nodes: nodesState(pl.nodes) }; });
+  let planets = {}; Object.keys(PLs).forEach((id) => { const pl = PLs[id]; planets[id] = { props: propsDone(pl.props), nodes: nodesState(pl.nodes) }; });
+  if (MP.seedOv != null) { try { planets = (JSON.parse(lsGet(SAVE_V6) || "{}").planets) || {}; } catch (e) { planets = {}; } }
   const npcs = {}; W.npcs.forEach((n) => { if (n.fam) return; npcs[n.id || n.nome] = { li: n.li || 0, itemDone: !!n.itemDone, hx: Math.round(n.hx), hy: Math.round(n.hy) }; });
   const wp = scene === "world" && !X.farmIn && !P.swim ? { x: Math.round(P.x), y: Math.round(P.y) } : _wpos;
   return {
     v: 6, t: Date.now(), game: "pinscherverse", gold, X: Xc, Q, catProg, cat: cat.breed, dayT,
     P: { clsId: P.clsId, tint: P.tint, mount: P.mount, gear: P.gear, inventory: P.inventory, equipped: P.equipped, amulets: P.amulets, rep: P.rep, hp: Math.round(P.hp) },
     world: { plots: W.plots.map((p) => [p.type, Math.round(p.g * 10) / 10, p.w]), props: propsDone(W.props), nodes: nodesState(W.nodes), npcs }, planets, pos: wp,
-    meta: { cls: P.cls && P.cls.nome, day: X.day, gold, colonies: Object.keys(X.colonies).length, spouse: X.fam && X.fam.spouse ? X.fam.spouse.nome : null, kids: X.fam ? X.fam.kids.length : 0 },
+    meta: { vale: 1, wname: X.wname, diff: X.diff, seed: X.wseed, cls: P.cls && P.cls.nome, day: X.day, gold, colonies: Object.keys(X.colonies).length, spouse: X.fam && X.fam.spouse ? X.fam.spouse.nome : null, kids: X.fam ? X.fam.kids.length : 0 },
   };
 }
 function saveGame(manual) {
@@ -4183,25 +4190,26 @@ function saveGame(manual) {
   } catch (e) { toast("⚠️ Não foi possível salvar aqui (armazenamento bloqueado/cheio). Use Menu → ⚙️ Jogo → Exportar progresso.", 5000); return false; }
 }
 function parseSave(raw) { try { const s = JSON.parse(raw); return s && s.P && (s.X || s.v) ? s : null; } catch (e) { return null; } }
-function bestSaveRaw() { return [SAVE_V6, SAVE_BAK, "pinscherverse_v5"].map(lsGet).find((r) => r && parseSave(r)) || null; }
+function bestSaveRaw() { return [SAVE_V6, SAVE_BAK].concat(WSLOT === 1 ? ["pinscherverse_v5"] : []).map(lsGet).find((r) => r && parseSave(r)) || null; }
 function hasSave() { return !!bestSaveRaw(); }
 function saveInfo() { const r = bestSaveRaw(); if (!r) return null; const s = parseSave(r), m = s.meta || {}; return { cls: m.cls || (CLASSES[s.P.clsId] && CLASSES[s.P.clsId].nome) || "Pinscher", day: m.day || (s.X && s.X.day) || 1, t: s.t || 0, gold: s.gold || 0, v: s.v }; }
 function saveLabel() { const i = saveInfo(); if (!i) return "📂 Continuar"; const d = i.t ? new Date(i.t) : null; return "📂 Continuar · " + i.cls + " · Dia " + i.day + (d ? " · " + d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""); }
 function applySave(s) {
   el["overlay-start"].classList.add("hidden"); X.testMode = false; pickClass(s.P.clsId); gold = s.gold || 0;
-  Object.assign(X, s.X); X.farmIn = false; X.boatOn = false; Object.assign(Q, s.Q || {});
+  Object.keys(PLs).forEach((k) => { delete PLs[k]; }); Object.assign(X, s.X); X.farmIn = false; X.boatOn = false; Object.assign(Q, s.Q || {});
   Object.keys(s.catProg || {}).forEach((k) => { if (catProg[k]) Object.assign(catProg[k], s.catProg[k]); }); cat.breed = (typeof s.cat === "string" ? s.cat : s.cat && s.cat.breed) || "viralata";
   Object.assign(P, { tint: s.P.tint, mount: s.P.mount, gear: s.P.gear || P.gear, inventory: s.P.inventory || [], equipped: s.P.equipped || {}, amulets: s.P.amulets || [], rep: s.P.rep != null ? s.P.rep : P.rep });
   applyAmuletHp(); P.hp = Math.max(1, Math.min(P.hpMax, s.P.hp || P.hpMax)); P.o2 = maxO2();
   if (s.dayT != null) { dayT = s.dayT; X.lastDayT = dayT; }
   const w = s.world; if (w) {
     (w.plots || []).forEach((q, i) => { if (W.plots[i]) { W.plots[i].type = q[0]; W.plots[i].g = q[1]; W.plots[i].w = q[2]; } }); propsApply(W.props, w.props); nodesApply(W.nodes, w.nodes);
-    Object.keys(w.npcs || {}).forEach((id) => { const n = W.npcs.find((q) => !q.fam && (q.id || q.nome) === id), st = w.npcs[id]; if (n && st) { n.li = st.li; n.itemDone = st.itemDone; n.hx = st.hx; n.hy = st.hy; n.x = st.hx; n.y = st.hy; } });
+    Object.keys(w.npcs || {}).forEach((id) => { const n = W.npcs.find((q) => !q.fam && (q.id || q.nome) === id), st = w.npcs[id]; if (n && st) { n.li = st.li; n.itemDone = st.itemDone; if (s.meta && s.meta.vale || !(st.hx < 1250 && st.hy < 1100)) { n.hx = st.hx; n.hy = st.hy; n.x = st.hx; n.y = st.hy; } } });
   } else if (Q.mineOpen) { const m = W.npcs.find((n) => n.special === "minerador"); if (m) { m.hx += 130; m.x += 130; } }
   Object.keys(s.planets || {}).forEach((id) => { if (!BODIES[id]) return; try { if (!PLs[id]) PLs[id] = genPlanet(id); propsApply(PLs[id].props, s.planets[id].props); nodesApply(PLs[id].nodes, s.planets[id].nodes); } catch (e) { } });
-  if (s.pos && isFinite(s.pos.x) && !blockedWorldX(s.pos.x, s.pos.y, 18, 18)) { P.x = s.pos.x; P.y = s.pos.y; } else if (s.v >= 6) { P.x = 520; P.y = 470; }
+  if (s.pos && !(s.meta && s.meta.vale) && s.pos.x < 1250 && s.pos.y < 1100) { s.pos.x += FDX; s.pos.y += FDY; }
+  if (s.pos && isFinite(s.pos.x) && !blockedWorldX(s.pos.x, s.pos.y, 18, 18)) { P.x = s.pos.x; P.y = s.pos.y; } else if (s.v >= 6) { P.x = HOME_SPOT.x; P.y = HOME_SPOT.y + 50; }
   cat.x = P.x - 20; cat.y = P.y; camera.x = clamp(P.x - VIEW_W / 2, 0, WORLD_W - VIEW_W); camera.y = clamp(P.y - VIEW_H / 2, 0, WORLD_H - VIEW_H); _wpos = { x: P.x, y: P.y };
-  try { famSync(); } catch (e) { } try { if (X.story && typeof ST === "function") ST(); } catch (e) { }
+  try { famSync(); } catch (e) { } try { FM(); farmApplyStructs(); } catch (e) { } try { if (X.story && typeof ST === "function") ST(); } catch (e) { }
   ui = null; toast("📂 Jogo carregado! Dia " + X.day, 2400); return true;
 }
 function loadGame() { const raw = bestSaveRaw(); if (!raw) { toast("Nenhum jogo salvo encontrado.", 2200); return false; } try { return applySave(parseSave(raw)); } catch (e) { console.error(e); toast("⚠️ Falha ao carregar o save (use o backup em Menu → ⚙️ Jogo).", 4000); return false; } }
@@ -4233,14 +4241,13 @@ setInterval(() => {
   _lastUi = ui; _lastScene = scene; _lastDay = X.day;
 }, 1000);
 document.addEventListener("visibilitychange", () => { if (document.hidden) saveGame(); }); window.addEventListener("pagehide", () => saveGame()); window.addEventListener("beforeunload", () => saveGame());
-document.addEventListener("click", (e) => { if (e.target && e.target.id === "btnStart") { const cur = lsGet(SAVE_V6); if (cur && !started) lsSet(SAVE_OLD, cur); } }, true);
 
 // ============================================================
 // pv21: MULTIPLAYER cooperativo (até 4 jogadores) — WebRTC P2P, sem servidor próprio (ideal para GitHub Pages)
 //  · Sala por código curto (PeerJS cloud, carregado sob demanda)  · Conexão manual por convite (100% sem servidor)
 //  · Presença no mundo/planetas/espaço · Chat e emotes · Foguete compartilhado (piloto + tripulação), pouso e saltos juntos
 // ============================================================
-const MP = { on: false, role: null, id: "p" + Math.random().toString(36).slice(2, 8), name: "", players: {}, links: {}, leader: null, follow: true, crew: false, invites: [], ui: { code: "", invite: "", answer: "", chat: "" }, status: "", peer: null, room: null, chat: [], _rt: null, _ks: "", _t: 0, _ts: 0, _rk: 0, _sp: 0 };
+const MP = { seedOv: null, wname: "", on: false, role: null, id: "p" + Math.random().toString(36).slice(2, 8), name: "", players: {}, links: {}, leader: null, follow: true, crew: false, invites: [], ui: { code: "", invite: "", answer: "", chat: "" }, status: "", peer: null, room: null, chat: [], _rt: null, _ks: "", _t: 0, _ts: 0, _rk: 0, _sp: 0 };
 function mpLog() { if (window.__pvdbg) console.log("DBG", ...arguments); }
 const MP_MAX = 4, ICE = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -4282,13 +4289,13 @@ function mpHostAccept(link, m) {
   if (Object.keys(MP.links).length >= MP_MAX - 1) { link.send({ t: "full" }); setTimeout(() => link.close(), 300); return; }
   link.pid = String(m.id || "").slice(0, 12); if (!link.pid || MP.links[link.pid]) { link.close(); return; } MP.links[link.pid] = link;
   MP.players[link.pid] = { id: link.pid, nm: String(m.nm || "Jogador").slice(0, 14), k: "x", x: 0, y: 0, tx: 0, ty: 0, f: "down", m: m.m, d: m.d, seen: Date.now() };
-  link.send({ t: "wel", id: MP.id, nm: mpName(), leader: MP.leader, players: Object.keys(MP.players).filter((i) => i !== link.pid).map((i) => ({ id: i, nm: MP.players[i].nm })), k: locKey() });
+  link.send({ t: "wel", id: MP.id, nm: mpName(), leader: MP.leader, seed: X.wseed | 0, wn: X.wname || "", dif: X.diff || "normal", players: Object.keys(MP.players).filter((i) => i !== link.pid).map((i) => ({ id: i, nm: MP.players[i].nm })), k: locKey() });
   mpSend({ t: "join", id: link.pid, nm: MP.players[link.pid].nm, to: null }); Object.keys(MP.links).forEach((i) => { if (i !== link.pid) MP.links[i].send({ t: "join", id: link.pid, nm: MP.players[link.pid].nm, from: MP.id }); });
   mpToast("🌐 " + MP.players[link.pid].nm + " entrou na sala!", 3000); mpPushState(true);
 }
 function mpHandle(m) {
   const from = m.from; if (m.t === "p") { let r = MP.players[from]; if (!r) { if (!from || from === MP.id) return; r = MP.players[from] = { id: from, nm: m.nm, x: m.x, y: m.y, tx: m.x, ty: m.y }; } const fk = r.k; Object.assign(r, { nm: String(m.nm || r.nm).slice(0, 14), k: m.k, sys: m.sys, f: m.f, m: m.m, d: m.d, h: m.h, c: m.c, a: m.a, tx: m.x, ty: m.y, mv: m.mv, seen: Date.now() }); if (fk !== m.k || Math.hypot(r.x - r.tx, r.y - r.ty) > 400 || r.x == null) { r.x = m.x; r.y = m.y; } return; }
-  if (m.t === "wel") { MP.leader = m.leader || m.id; MP.players[m.id] = MP.players[m.id] || { id: m.id, nm: m.nm, k: m.k, x: 0, y: 0, tx: 0, ty: 0, f: "down" }; (m.players || []).forEach((q) => { MP.players[q.id] = MP.players[q.id] || { id: q.id, nm: q.nm, k: "x", x: 0, y: 0, tx: 0, ty: 0, f: "down" }; }); MP.status = "Conectado"; MP.on = true; MP.links.host.pid = m.id; mpToast("🌐 Conectado à sala de " + m.nm + "!", 3200); return; }
+  if (m.t === "wel") { MP.leader = m.leader || m.id; mpAdoptWorld(m); MP.players[m.id] = MP.players[m.id] || { id: m.id, nm: m.nm, k: m.k, x: 0, y: 0, tx: 0, ty: 0, f: "down" }; (m.players || []).forEach((q) => { MP.players[q.id] = MP.players[q.id] || { id: q.id, nm: q.nm, k: "x", x: 0, y: 0, tx: 0, ty: 0, f: "down" }; }); MP.status = "Conectado"; MP.on = true; MP.links.host.pid = m.id; mpToast("🌐 Conectado à sala de " + m.nm + "!", 3200); return; }
   if (m.t === "full") { mpToast("Sala cheia (máx. " + MP_MAX + " jogadores).", 3500); mpLeave(true); return; }
   if (m.t === "join") { if (m.id !== MP.id) { MP.players[m.id] = MP.players[m.id] || { id: m.id, nm: m.nm, k: "x", x: 0, y: 0, tx: 0, ty: 0, f: "down" }; mpToast("🌐 " + m.nm + " entrou!", 2400); } return; }
   if (m.t === "bye") { const r = MP.players[m.id]; if (r) { delete MP.players[m.id]; mpToast("👋 " + r.nm + " saiu.", 2400); } if (MP.leader === m.id) MP.leader = m.leader || (MP.role === "host" ? MP.id : MP.leader); return; }
@@ -4307,7 +4314,7 @@ function mpPushState(force) { if (!MP.on) return; const s = selfState(), key = [
 function mpSendChat(tx) { tx = String(tx || "").trim().slice(0, 120); if (!tx || !MP.on) return; mpChatAdd(mpName(), tx); mpSend({ t: "c", tx }); }
 function mpEmote(e) { if (!MP.on) return; MP.selfEm = e; MP.selfEmT = Date.now() + 3500; mpSend({ t: "em", e }); }
 // ---------- criar sala / entrar ----------
-function mpLeave(silent) { mpLog("leave", MP.role, new Error().stack.split("\n")[2]); try { Object.keys(MP.links).forEach((id) => MP.links[id].close()); } catch (e) { } try { MP.peer && MP.peer.destroy(); } catch (e) { } MP.invites.forEach((iv) => { try { iv.pc.close(); } catch (e) { } }); Object.assign(MP, { on: false, role: null, players: {}, links: {}, leader: null, crew: false, invites: [], peer: null, room: null, status: "" }); if (!silent) mpToast("Você saiu da sala.", 2000); else mpRefreshUI(); }
+function mpLeave(silent) { if (MP.seedOv != null) { MP.seedOv = null; MP.wname = ""; clearPlanets(); } mpLog("leave", MP.role, new Error().stack.split("\n")[2]); try { Object.keys(MP.links).forEach((id) => MP.links[id].close()); } catch (e) { } try { MP.peer && MP.peer.destroy(); } catch (e) { } MP.invites.forEach((iv) => { try { iv.pc.close(); } catch (e) { } }); Object.assign(MP, { on: false, role: null, players: {}, links: {}, leader: null, crew: false, invites: [], peer: null, room: null, status: "" }); if (!silent) mpToast("Você saiu da sala.", 2000); else mpRefreshUI(); }
 function mpBecomeHost() { if (MP.role === "guest") return false; if (!MP.role) { MP.role = "host"; MP.on = true; MP.leader = MP.id; } return true; }
 function mpAttachGuestLink(link) { link.onmsg = (m) => mpOnLinkMsg(link, m); link.onclose = () => { if (link.pid && MP.links[link.pid] === link) { const r = MP.players[link.pid], id = link.pid; delete MP.links[id]; delete MP.players[id]; mpSend({ t: "bye", id, leader: MP.leader === id ? MP.id : MP.leader }); if (MP.leader === id) MP.leader = MP.id; if (r) mpToast("👋 " + r.nm + " saiu da sala.", 2600); } }; }
 function loadPeerJS() { return new Promise((res, rej) => { if (window.Peer) return res(); const s = document.createElement("script"); s.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"; s.onload = () => res(); s.onerror = () => rej(new Error("Não foi possível carregar o serviço de salas (sem internet ou bloqueado)." )); document.head.appendChild(s); setTimeout(() => rej(new Error("Tempo esgotado ao carregar o serviço de salas.")), 12000); }); }
@@ -4443,6 +4450,913 @@ function mpClick(a, v) {
 function enterSpace(from) { enterSpace0(from); if (MP.on && !mpIsLeader() && MP.follow) { const L = mpLeaderState(); MP.crew = !!(L && L.k && L.k[0] === "s"); } else MP.crew = false; }
 function rwd(k, n) { mpLog("rwd", k, n, MP._rt); if (MP._rt) mpSend({ t: "rw", to: MP._rt, k, n }); else radd(k, n); }
 
+// ============================================================
+// pv22: mundos — 3 slots, criar mundo (nome, semente, dificuldade), jogar solo/online
+// ============================================================
+const DIFFS = { relax: { nm: "😌 Relax", d: "Você sofre 40% menos dano e causa 25% mais.", hm: .6, dm: 1.25 }, normal: { nm: "⚔️ Normal", d: "A experiência padrão.", hm: 1, dm: 1 }, hard: { nm: "💀 Desafio", d: "Inimigos batem 50% mais forte e aguentam 25% mais.", hm: 1.5, dm: .8 } };
+let NEWW = null;
+function diffHurt(o) { const d = DIFFS[(X && X.diff) || "normal"] || DIFFS.normal; return o && o.env ? Math.min(1, d.hm) : d.hm; }
+function diffDeal() { const d = DIFFS[(X && X.diff) || "normal"] || DIFFS.normal; return d.dm; }
+function worldSeed() { return MP.seedOv != null ? MP.seedOv : (X.wseed | 0); }
+function wseedOff() { try { return worldSeed() * 7919; } catch (e) { return 0; } }
+function seedFrom(txt) { txt = String(txt || "").trim(); if (!txt) return 0; if (/^-?\d{1,9}$/.test(txt)) return parseInt(txt, 10) | 0; let h = 2166136261; for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 900000000 + 1; }
+function clearPlanets() { Object.keys(PLs).forEach((k) => { delete PLs[k]; }); }
+function mpAdoptWorld(m) { if (m.seed == null) return; const sd = m.seed | 0; MP.wname = m.wn || ""; if (sd !== (X.wseed | 0) || MP.seedOv != null) { MP.seedOv = sd; clearPlanets(); mpToast("🌍 Você entrou no mundo \"" + (m.wn || "do anfitrião") + "\" (planetas do anfitrião).", 3500); } }
+function worldNewApply() {
+  if (!NEWW) return; const n = NEWW; NEWW = null; clearPlanets();
+  X.wseed = n.seed; X.diff = n.diff; X.wname = n.name; X.created = Date.now();
+  if (n.online) setTimeout(() => { if (ui === null) openX("panel", "online"); }, 900);
+}
+function slotInfo(n) {
+  const k = slotKeys(n), raws = [lsGet(k[0]), lsGet(k[1])].concat(n === 1 ? [lsGet("pinscherverse_v5")] : []); const raw = raws.find((r) => r && parseSave(r)); if (!raw) return null;
+  const s = parseSave(raw), m = s.meta || {}; return { name: m.wname || (n === 1 ? "Mundo Principal" : "Mundo " + n), cls: m.cls || (CLASSES[s.P.clsId] && CLASSES[s.P.clsId].nome) || "Pinscher", day: m.day || (s.X && s.X.day) || 1, t: s.t || 0, diff: m.diff || (s.X && s.X.diff) || "normal", seed: m.seed != null ? m.seed : (s.X && s.X.wseed) || 0, gold: s.gold || 0, kids: m.kids || 0, cols: m.colonies || 0 };
+}
+function worldsHTML() {
+  let s = "<h2>🌍 Seus Mundos</h2><p class='lead'>Cada mundo tem o próprio progresso. Crie um mundo e depois jogue sozinho ou abra uma sala para os amigos.</p><div class='cards' style='grid-template-columns:1fr;max-height:none'>";
+  [1, 2, 3].forEach((n) => {
+    const i = slotInfo(n);
+    if (i) { const d = new Date(i.t); s += "<div class='card'><h3>🌍 " + esc(i.name) + " <small>(slot " + n + ")</small></h3><p>" + esc(i.cls) + " · Dia " + i.day + " · " + (DIFFS[i.diff] || DIFFS.normal).nm + (i.cols ? " · 🏗️ " + i.cols : "") + (i.kids ? " · 👶 " + i.kids : "") + "</p><p class='mini'>Semente: " + (i.seed || "original") + " · salvo em " + d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) + "</p><div class='row'><button data-w='play' data-n='" + n + "'>▶ Jogar</button><button data-w='online' data-n='" + n + "'>🌐 Jogar online</button><button class='ghost' data-w='del' data-n='" + n + "'>🗑️</button></div></div>"; }
+    else s += "<div class='card'><h3>✨ Slot " + n + " — vazio</h3><p class='mini'>Crie um novo mundo com sua própria semente e dificuldade.</p><div class='row'><button data-w='new' data-n='" + n + "'>➕ Criar mundo</button></div></div>";
+  });
+  return s + "</div><div class='row' style='margin-top:6px'><button class='ghost' data-w='back'>← Voltar</button></div>";
+}
+function createHTML(n) {
+  const nm = WF.name != null ? WF.name : "Mundo " + n, sd = WF.seed != null ? WF.seed : String(Math.floor(Math.random() * 900000) + 1000), df = WF.diff || "normal", ol = !!WF.online;
+  let s = "<h2>➕ Criar mundo (slot " + n + ")</h2><div class='card' style='width:min(560px,100%);text-align:left'><p><b>Nome do mundo</b><br><input id='wfName' maxlength='20' value=\"" + esc(nm) + "\" style='width:100%;padding:8px;border-radius:8px;border:1px solid #4a3d2e;background:#1b1713;color:#fff;font-size:16px'></p>";
+  s += "<p><b>Semente</b> <span class='mini'>(número ou palavra — muda a geração dos planetas; amigos usam a do anfitrião)</span><br><span style='display:flex;gap:6px'><input id='wfSeed' value=\"" + esc(sd) + "\" style='flex:1;padding:8px;border-radius:8px;border:1px solid #4a3d2e;background:#1b1713;color:#fff;font-size:16px'><button data-w='dice' data-n='" + n + "'>🎲</button></span></p><p><b>Dificuldade</b></p><div style='display:grid;gap:6px'>";
+  Object.keys(DIFFS).forEach((k) => { s += "<button data-w='diff' data-k='" + k + "' data-n='" + n + "' class='" + (k === df ? "" : "ghost") + "' style='text-align:left'>" + DIFFS[k].nm + " — <span class='mini'>" + DIFFS[k].d + "</span></button>"; });
+  s += "</div><p style='margin-top:10px'><label><input type='checkbox' id='wfOnline'" + (ol ? " checked" : "") + "> 🌐 Abrir o menu <b>Online</b> ao entrar (criar sala / entrar na sala de um amigo)</label></p></div><div class='row' style='margin-top:8px'><button data-w='go' data-n='" + n + "'>🐶 Escolher Pinscher e começar</button><button class='ghost' data-w='list'>← Voltar</button></div>";
+  return s;
+}
+let WF = {};
+function worldsShow(html) { const o = document.getElementById("overlay-worlds"); o.innerHTML = html; o.classList.remove("hidden"); }
+function worldsStartPlay(n, online) { useSlot(n); document.getElementById("overlay-worlds").classList.add("hidden"); const ok = loadGame(); if (ok && online) setTimeout(() => { if (ui === null) openX("panel", "online"); }, 700); else if (!ok) worldsShow(worldsHTML()); }
+function worldsClick(e) {
+  const b = e.target.closest && e.target.closest("[data-w]"); if (!b) return; const a = b.getAttribute("data-w"), n = +b.getAttribute("data-n") || 0; e.stopPropagation();
+  const readForm = () => { const a1 = document.getElementById("wfName"), a2 = document.getElementById("wfSeed"), a3 = document.getElementById("wfOnline"); if (a1) WF.name = a1.value; if (a2) WF.seed = a2.value; if (a3) WF.online = a3.checked; };
+  if (a === "back") { document.getElementById("overlay-worlds").classList.add("hidden"); el["overlay-start"].classList.remove("hidden"); }
+  else if (a === "list") worldsShow(worldsHTML());
+  else if (a === "play") worldsStartPlay(n, false); else if (a === "online") worldsStartPlay(n, true);
+  else if (a === "del") { const i = slotInfo(n); if (confirm("Apagar o mundo \"" + (i ? i.name : n) + "\"? Isso não pode ser desfeito (exporte antes, se quiser guardar).")) { slotKeys(n).forEach((k) => { try { localStorage.removeItem(k); } catch (er) { } }); worldsShow(worldsHTML()); } }
+  else if (a === "new") { WF = {}; worldsShow(createHTML(n)); }
+  else if (a === "dice") { readForm(); WF.seed = String(Math.floor(Math.random() * 900000) + 1000); worldsShow(createHTML(n)); }
+  else if (a === "diff") { readForm(); WF.diff = b.getAttribute("data-k"); worldsShow(createHTML(n)); }
+  else if (a === "go") {
+    readForm(); const nm = String(WF.name || "").trim().slice(0, 20) || "Mundo " + n; useSlot(n); [SAVE_V6, SAVE_BAK, SAVE_OLD].forEach((k) => { try { localStorage.removeItem(k); } catch (er) { } });
+    NEWW = { name: nm, seed: seedFrom(WF.seed), diff: WF.diff || "normal", online: !!WF.online }; clearPlanets();
+    document.getElementById("overlay-worlds").classList.add("hidden"); buildClassCards(false); openOverlay("overlay-class", "class");
+  }
+}
+function worldsInit() {
+  const st = document.createElement("style"); st.textContent = "#overlay-worlds .card{text-align:left;background:#211b15;border:1px solid #4a3d2e;border-radius:10px;padding:10px 12px;width:min(620px,100%)}#overlay-worlds h3{margin:0 0 4px;color:#ffd84a}#overlay-worlds .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#overlay-worlds{justify-content:flex-start}"; document.head.appendChild(st);
+  const o = document.createElement("div"); o.id = "overlay-worlds"; o.className = "overlay hidden"; o.style.zIndex = 22; el["overlay-start"].parentNode.appendChild(o); o.addEventListener("click", worldsClick);
+  const sb = document.getElementById("btnStart"); if (sb) { sb.textContent = "🌍 Mundos"; sb.addEventListener("click", (e) => { e.stopImmediatePropagation(); el["overlay-start"].classList.add("hidden"); worldsShow(worldsHTML()); }, true); }
+  const lb = [...el["overlay-start"].querySelectorAll("button")].find((x) => /Continuar/.test(x.textContent)); if (lb) lb.remove();
+}
+
+// ============================================================
+// pv23: estações do ano (7 dias cada) + festivais
+// ============================================================
+const SEASONS = [
+  { id: "primavera", nm: "Primavera", ic: "🌸", tint: "rgba(255,170,210,.07)", fx: "Plantas crescem 50% mais rápido.", gr: .5 },
+  { id: "verao", nm: "Verão", ic: "🌞", tint: "rgba(255,200,60,.08)", fx: "Dias quentes e luminosos — ótimos para pescar e explorar.", gr: 0 },
+  { id: "outono", nm: "Outono", ic: "🍂", tint: "rgba(220,120,40,.09)", fx: "Folhas caindo. O festival rende mais ouro.", gr: 0 },
+  { id: "inverno", nm: "Inverno", ic: "❄️", tint: "rgba(140,190,255,.10)", fx: "Neve! As plantas crescem 30% mais devagar.", gr: -.3 },
+];
+function seasonIdx(day) { return Math.floor((((day || 1) - 1) % 28) / 7); }
+function season() { return SEASONS[seasonIdx(X.day)]; }
+function isFestival() { return (X.day || 1) % 7 === 0; }
+function hudExtra() { const s = season(); return " " + WX[X.wx.t].ic + " " + s.ic + (isFestival() ? "🎉" : ""); }
+let _SP = null;
+function seasonDraw() {
+  const s = season(), g = ctx, t = Date.now() / 1000; g.save(); g.fillStyle = s.tint; g.fillRect(0, 0, VIEW_W, VIEW_H);
+  if (!_SP) { _SP = []; for (let i = 0; i < 46; i++) _SP.push({ x: Math.random(), y: Math.random(), v: .4 + Math.random() * .8, s: 1.5 + Math.random() * 2.5, ph: Math.random() * 6 }); }
+  const col = s.id === "primavera" ? "#ffc2de" : s.id === "outono" ? "#d9822b" : s.id === "inverno" ? "#ffffff" : null;
+  if (col && !(X.wx.t === "rain" || X.wx.t === "storm")) { g.fillStyle = col; _SP.forEach((p) => { const sp = s.id === "inverno" ? 38 : 60; const x = ((p.x * VIEW_W + Math.sin(t * p.v + p.ph) * 28 + t * (s.id === "inverno" ? 6 : 22)) % (VIEW_W + 20) + VIEW_W + 20) % (VIEW_W + 20), y = ((p.y * VIEW_H + t * sp * p.v) % (VIEW_H + 12) + VIEW_H + 12) % (VIEW_H + 12); g.globalAlpha = .55 + .3 * Math.sin(t * 2 + p.ph); if (s.id === "inverno") { g.beginPath(); g.arc(x, y, p.s * .7, 0, 6.283); g.fill(); } else { g.save(); g.translate(x, y); g.rotate(t * p.v + p.ph); g.fillRect(-p.s, -p.s * .5, p.s * 2, p.s); g.restore(); } }); }
+  if (isFestival()) { g.globalAlpha = 1; const cs = ["#ff5c8a", "#ffd84a", "#6bd0ff", "#8dff6b", "#c58bff"]; for (let i = 0; i < 30; i++) { const x = (i * 97 + Math.sin(t + i) * 30 + 800) % VIEW_W, y = ((t * (40 + i % 5 * 14) + i * 53) % (VIEW_H + 20)); g.fillStyle = cs[i % 5]; g.fillRect(x, y, 4, 7); } g.font = "bold 13px sans-serif"; g.textAlign = "center"; g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(VIEW_W / 2 - 110, 6, 220, 22); g.fillStyle = "#ffd84a"; g.fillText("🎉 Festival da " + s.nm + "!", VIEW_W / 2, 22); }
+  g.restore();
+}
+let _sd = null;
+function seasonDay() {
+  const s = season(); if (seasonIdx(X.day) !== seasonIdx(X.day - 1) || X.day === 1) toast(s.ic + " Chegou a " + s.nm + "! " + s.fx, 5200);
+  if (isFestival() && X.festGiven !== X.day) {
+    X.festGiven = X.day; const bonus = 80 * (seasonIdx(X.day) + 1) * (s.id === "outono" ? 2 : 1); gold += bonus;
+    Object.keys(X.friend || {}).forEach((k) => { X.friend[k] = Math.min(100, (X.friend[k] || 0) + 3); });
+    setTimeout(() => toast("🎉 Festival da " + s.nm + "! Todos se divertiram (♥+3) e você ganhou " + bonus + " 🍖 no sorteio.", 6000), 1500); X.festivals = (X.festivals || 0) + 1;
+  }
+}
+setInterval(() => {
+  if (!started || !X) return; const d = X.day || 1;
+  if (_sd === null) _sd = d; else if (d !== _sd) { const nx = d === _sd + 1; _sd = d; if (nx) seasonDay(); }
+  if (scene === "world" && ui === null && W && W.plots) { const gr = season().gr; if (gr) W.plots.forEach((p) => { if (p.type && p.w > 0 && CROPS[p.type] && p.g < CROPS[p.type].need) p.g = Math.max(0, p.g + gr * .25); }); }
+}, 250);
+
+// ============================================================
+// pv24: Fazenda 2.0 — horta ampliável, irrigadores, novas culturas, galinheiro, colmeia, pomar, árvores bonitas
+// ============================================================
+const FDIM = [[4, 4], [6, 4], [6, 6], [8, 6]], FORG = { x: 700 + FDX, y: 520 + FDY }, FSTEP = 48;
+const FUP = [{ g: 300, madeira: 10 }, { g: 800, madeira: 25 }, { g: 1800, madeira: 40, ferro: 8 }];
+const FBUILD = {
+  sprink: { nm: "💦 Irrigadores", g: 600, ferro: 10, d: "Rega toda a horta sozinha. Nunca mais plantas sedentas." },
+  coop: { nm: "🐔 Galinheiro", g: 400, madeira: 15, d: "Galinhas botam ovos todo dia. Colete no galinheiro." },
+  hive: { nm: "🐝 Colmeia", g: 500, madeira: 10, d: "As abelhas fazem mel a cada 3 dias." },
+  orch: { nm: "🍎 Pomar", g: 700, madeira: 20, d: "6 macieiras que dão maçãs a cada 3 dias." },
+};
+const CROP_LIST = ["raiz", "cogumelo", "flor", "milho", "morango", "abobora"];
+Object.assign(CROPS, { milho: { n: "Milho Dourado", need: 90, y: 3 }, morango: { n: "Morango Selvagem", need: 100, y: 3 }, abobora: { n: "Abóbora Gigante", need: 130, y: 2 } });
+Object.assign(RES, { milho: { n: "Milho Dourado", ic: "🌽", c: "#f0c53a" }, morango: { n: "Morango Selvagem", ic: "🍓", c: "#e0405a" }, abobora: { n: "Abóbora Gigante", ic: "🎃", c: "#e88a2a" }, ovo: { n: "Ovo Caipira", ic: "🥚", c: "#f3ead9" }, mel: { n: "Mel de Abelha", ic: "🍯", c: "#e8b030" }, maca: { n: "Maçã do Pomar", ic: "🍎", c: "#e0453a" } });
+Object.assign(PRICE, { milho: 9, morango: 14, abobora: 22, ovo: 7, mel: 30, maca: 11 });
+Object.assign(X.seed, { milho: 0, morango: 0, abobora: 0 });
+SHOP_TRIBAL.push({ id: "sem_milho", nome: "Sementes de Milho (x3)", preco: 14, desc: "Cresce em ~90s regado. Rende 3.", tag: "Horta" }, { id: "sem_moran", nome: "Sementes de Morango (x3)", preco: 18, desc: "Cresce em ~100s. Rende 3.", tag: "Horta" }, { id: "sem_abob", nome: "Sementes de Abóbora (x3)", preco: 24, desc: "Cresce em ~130s. Vale bem.", tag: "Horta" });
+function buyExtra(id) {
+  const m = { sem_milho: "milho", sem_moran: "morango", sem_abob: "abobora" }; if (m[id]) { X.seed[m[id]] = (X.seed[m[id]] | 0) + 3; toast("🌱 +3 sementes de " + CROPS[m[id]].n, 1600); return true; }
+  return buyExtra0(id);
+}
+function FM() { if (!X.farm) X.farm = { lv: 0, sprink: false, coop: false, hive: false, orch: false, eggs: 0, honey: 0, fruit: [0, 0, 0, 0, 0, 0], last: X.day || 1 }; return X.farm; }
+function plotLocked(p) { return (p.tier | 0) > FM().lv; }
+function sdn(k) { return X.seed[k] | 0; }
+function selSeed() { if (X.selSeed && sdn(X.selSeed) > 0) return X.selSeed; return CROP_LIST.find((k) => sdn(k) > 0) || null; }
+function plotNear() { let b = null, bd = 44; W.plots.forEach((q) => { if (plotLocked(q)) return; const d = dist(P.x, P.y, q.x + 20, q.y + 20); if (d < bd) { bd = d; b = q; } }); return b; }
+function plotAct(p) {
+  if (!p.type) { const k = selSeed(); if (!k) { toast("Sem sementes! Compre no Armazém Tribal (Horta).", 2400); return; } X.seed[k]--; p.type = k; p.g = 0; p.w = 100; farmBurst(p.x + 20, p.y + 24, "#8a5a34"); toast("🌱 Plantou " + CROPS[k].n + " e regou. (" + sdn(k) + " sementes restantes)", 2200); return; }
+  const c = CROPS[p.type];
+  if (p.g >= c.need) { let q = c.y + (Math.random() < .25 ? 1 : 0) + (X.fac.tribo >= 25 ? 1 : 0); X.harvest++; facAdd("tribo", 1); radd(p.type, q); gainCatXP(3); gainRep(1); farmBurst(p.x + 20, p.y + 20, RES[p.type].c); toast("🌾 Colheu " + q + " " + RES[p.type].ic + " " + RES[p.type].n + "!", 2200); p.type = null; p.g = 0; p.w = 0; return; }
+  if (p.w <= 0) { p.w = 100; farmBurst(p.x + 20, p.y + 20, "#6bd0ff"); toast("💧 Regou a plantação.", 1400); } else toast("Já está úmida. Crescimento: " + Math.floor(p.g / c.need * 100) + "%", 1500);
+}
+function extraHint() {
+  { const wh = wpHint() || farmHint(); if (wh) return wh; } const p = plotNear();
+  if (p) { if (!p.type) { const k = selSeed(); return k ? "[F] Plantar " + CROPS[k].n : "Sem sementes (compre no Armazém Tribal)"; } const c = CROPS[p.type]; return p.g >= c.need ? "[F] Colher " + c.n : (p.w <= 0 ? "[F] Regar " + c.n : c.n + " crescendo " + Math.floor(p.g / c.need * 100) + "%"); }
+  if (fishNear()) return "[F] Pescar aqui"; if (W.obs.some((o) => o.type === "board" && rdist(o) < 60)) return "[F] Quadro de Missões (bounties)"; return "";
+}
+// ---------- partículas de fazenda ----------
+const FPART = [];
+function farmBurst(x, y, col) { for (let i = 0; i < 12; i++) FPART.push({ x, y, vx: (Math.random() - .5) * 90, vy: -30 - Math.random() * 70, t: .7 + Math.random() * .4, c: col }); }
+// ---------- layout / estruturas ----------
+function fieldRect() { const d = FDIM[FM().lv]; return { x: FORG.x, y: FORG.y, w: d[0] * FSTEP - 8, h: d[1] * FSTEP - 8 }; }
+function plotsSoilDraw() {
+  const g = ctx, f = FM(), d = FDIM[f.lv], R = fieldRect(), ox = camera.x, oy = camera.y, t = Date.now() / 1000;
+  const sx0 = R.x - ox - 12, sy0 = R.y - oy - 12; if (sx0 > VIEW_W + 60 || sx0 + R.w + 30 < -60 || sy0 > VIEW_H + 60 || sy0 + R.h + 30 < -60) return;
+  g.save(); g.fillStyle = "rgba(60,38,20,.55)"; g.fillRect(sx0, sy0, R.w + 24, R.h + 24); g.strokeStyle = "rgba(0,0,0,.22)"; g.strokeRect(sx0 + .5, sy0 + .5, R.w + 23, R.h + 23);
+  if (f.lv < 3) { const n = FDIM[f.lv + 1]; g.setLineDash([6, 5]); g.strokeStyle = "rgba(255,220,120,.35)"; g.strokeRect(FORG.x - ox - 10, FORG.y - oy - 10, n[0] * FSTEP - 4, n[1] * FSTEP - 4); g.setLineDash([]); }
+  W.plots.forEach((p) => {
+    if (plotLocked(p)) return; const sx = p.x - ox, sy = p.y - oy; if (sx < -50 || sx > VIEW_W + 50 || sy < -50 || sy > VIEW_H + 50) return; const wet = p.w > 0;
+    g.fillStyle = wet ? "#35210f" : "#74512f"; g.fillRect(sx, sy, 40, 40); g.fillStyle = wet ? "#46301a" : "#86603a"; g.fillRect(sx + 2, sy + 2, 36, 4);
+    g.fillStyle = "rgba(0,0,0,.2)"; for (let r = 0; r < 4; r++) g.fillRect(sx + 3, sy + 9 + r * 8, 34, 3); g.fillStyle = "rgba(255,255,255,.07)"; for (let r = 0; r < 4; r++) g.fillRect(sx + 3, sy + 8 + r * 8, 34, 1);
+    if (wet) { g.fillStyle = "rgba(120,190,255,.10)"; g.fillRect(sx, sy, 40, 40); } g.strokeStyle = "rgba(0,0,0,.35)"; g.strokeRect(sx + .5, sy + .5, 39, 39);
+  });
+  // cerca
+  g.fillStyle = "#7a5230"; const fx = sx0 - 2, fy = sy0 - 4, fw = R.w + 28, fh = R.h + 28; g.fillRect(fx, fy + 4, fw, 3); g.fillRect(fx, fy + fh - 2, fw, 3); g.fillRect(fx, fy + 4, 3, fh - 6); g.fillRect(fx + fw - 3, fy + 4, 3, fh - 6);
+  g.fillStyle = "#5c3a1f"; for (let x = fx; x <= fx + fw; x += 24) { g.fillRect(x, fy, 4, 12); g.fillRect(x, fy + fh - 6, 4, 12); } for (let y = fy; y <= fy + fh; y += 24) { g.fillRect(fx, y, 4, 10); g.fillRect(fx + fw - 4, y, 4, 10); }
+  if (f.sprink) { for (let j = 0; j < d[1]; j += 2) for (let i = 0; i < d[0]; i += 2) { const px = FORG.x + i * FSTEP + 44 - ox, py = FORG.y + j * FSTEP + 44 - oy; g.fillStyle = "#8a96a6"; g.fillRect(px - 2, py - 6, 4, 8); g.fillStyle = "#cfe9ff"; for (let a = 0; a < 5; a++) { const an = t * 2 + a * 1.26; g.globalAlpha = .45; g.fillRect(px + Math.cos(an) * (5 + (t * 8 + a * 3) % 7), py - 8 + Math.sin(an) * 3, 2, 2); } g.globalAlpha = 1; } }
+  g.restore();
+}
+function farmCropsDraw(dr) {
+  W.plots.forEach((p) => {
+    if (!p.type || plotLocked(p)) return;
+    dr.push({ y: p.y + 34, f: () => {
+      const sx = p.x - camera.x, sy = p.y - camera.y; if (sx < -50 || sx > VIEW_W + 50 || sy < -50 || sy > VIEW_H + 50) return; const g = ctx, c = CROPS[p.type], k = Math.min(1, p.g / c.need), t = Date.now(), sw = Math.sin(t / 700 + p.x * .05) * (1 + k * 1.5), cx = sx + 20, by = sy + 33;
+      g.save(); g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(cx, by + 1, 7 + k * 8, 3, 0, 0, 6.283); g.fill();
+      const leaf = (x, y, rx, ry, a, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, a, 0, 6.283); g.fill(); };
+      if (k < .25) { g.fillStyle = "#6b4a2a"; g.fillRect(cx - 1, by - 3, 2, 3); leaf(cx - 3 + sw * .3, by - 6, 3, 2, -.6, "#5cb04a"); leaf(cx + 3 + sw * .3, by - 6, 3, 2, .6, "#4a9a3a"); }
+      else if (p.type === "raiz") { const h = 6 + k * 16; leaf(cx - 5 + sw, by - h, 3 + k * 4, 2 + k * 3, -.7, "#3f8f35"); leaf(cx + 5 + sw, by - h, 3 + k * 4, 2 + k * 3, .7, "#4aa23c"); leaf(cx + sw, by - h - 2, 3 + k * 3, 5 + k * 4, 0, "#58b848"); if (k >= 1) { g.fillStyle = "#e8923a"; g.beginPath(); g.moveTo(cx - 5, by - 6); g.lineTo(cx + 5, by - 6); g.lineTo(cx, by + 1); g.closePath(); g.fill(); g.fillStyle = "#ffc27a"; g.fillRect(cx - 3, by - 6, 2, 3); } }
+      else if (p.type === "cogumelo") { const n = k >= 1 ? 3 : k > .6 ? 2 : 1; for (let i = 0; i < n; i++) { const x = cx + (i - (n - 1) / 2) * 10, h = 5 + k * 7 + (i % 2) * 3; g.fillStyle = "#e8e0f0"; g.fillRect(x - 1.5, by - h, 3, h); g.fillStyle = k >= 1 ? "#a77bf0" : "#8a6fd0"; g.beginPath(); g.ellipse(x, by - h, 4 + k * 3, 3 + k * 2, 0, Math.PI, 0); g.fill(); g.fillStyle = "rgba(255,255,255,.6)"; g.fillRect(x - 2, by - h - 2, 2, 1); if (k >= 1) { g.fillStyle = "rgba(190,150,255,.35)"; g.beginPath(); g.arc(x, by - h - 2, 8 + Math.sin(t / 300 + i) * 1.5, 0, 6.283); g.fill(); } } }
+      else if (p.type === "flor") { const h = 8 + k * 14; g.fillStyle = "#3f8f35"; g.fillRect(cx - 1 + sw * .3, by - h, 2, h); leaf(cx - 5, by - h * .45, 4, 2, -.6, "#4aa23c"); leaf(cx + 5, by - h * .45, 4, 2, .6, "#4aa23c"); const r = 3 + k * 4; g.fillStyle = "#f58ac8"; for (let a = 0; a < 6; a++) { g.beginPath(); g.arc(cx + sw * .6 + Math.cos(a * 1.047) * r, by - h + Math.sin(a * 1.047) * r, r * .65, 0, 6.283); g.fill(); } g.fillStyle = k >= 1 ? "#ffe27a" : "#e8c050"; g.beginPath(); g.arc(cx + sw * .6, by - h, r * .55, 0, 6.283); g.fill(); if (k >= 1) { g.fillStyle = "rgba(255,150,220,.28)"; g.beginPath(); g.arc(cx + sw * .6, by - h, r + 5 + Math.sin(t / 260) * 2, 0, 6.283); g.fill(); } }
+      else if (p.type === "milho") { const h = 10 + k * 22; g.fillStyle = "#4a9a3a"; g.fillRect(cx - 1.5 + sw * .4, by - h, 3, h); for (let i = 0; i < 3; i++) { leaf(cx - 7 + sw * (.3 + i * .2), by - h * (.3 + i * .22), 7, 2, -.5 - i * .1, "#58b848"); leaf(cx + 7 + sw * (.3 + i * .2), by - h * (.4 + i * .2), 7, 2, .5 + i * .1, "#4aa23c"); } if (k >= .7) { g.fillStyle = "#f0c53a"; g.beginPath(); g.ellipse(cx + 4 + sw * .4, by - h * .55, 3, 7, .2, 0, 6.283); g.fill(); g.fillStyle = "#6fb54a"; g.fillRect(cx + 1 + sw * .4, by - h * .55 - 6, 4, 4); g.fillStyle = "rgba(255,255,255,.35)"; g.fillRect(cx + 3 + sw * .4, by - h * .55 - 4, 1, 6); } if (k >= 1) { g.fillStyle = "#c98a1a"; g.fillRect(cx - 2 + sw * .4, by - h - 3, 4, 3); } }
+      else if (p.type === "morango") { const rr = 6 + k * 8; leaf(cx - 6, by - 4, rr * .7, 3 + k * 3, -.3, "#3f8f35"); leaf(cx + 6, by - 4, rr * .7, 3 + k * 3, .3, "#4aa23c"); leaf(cx, by - 8 - k * 3, rr * .6, 4 + k * 3, 0, "#58b848"); if (k >= .6) { const n = k >= 1 ? 4 : 2; [[-7, -3], [6, -2], [-1, -9], [10, -8]].slice(0, n).forEach((a) => { g.fillStyle = "#d8304a"; g.beginPath(); g.moveTo(cx + a[0] - 3, by + a[1] - 3); g.lineTo(cx + a[0] + 3, by + a[1] - 3); g.lineTo(cx + a[0], by + a[1] + 3); g.closePath(); g.fill(); g.fillStyle = "#ffe27a"; g.fillRect(cx + a[0] - 1, by + a[1] - 1, 1, 1); }); } }
+      else if (p.type === "abobora") { leaf(cx - 8, by - 5, 6 + k * 4, 3 + k * 3, -.4, "#3f8f35"); leaf(cx + 9, by - 6, 5 + k * 4, 3 + k * 2, .4, "#4aa23c"); if (k >= .55) { const r = 4 + (k - .55) / .45 * 8; g.fillStyle = k >= 1 ? "#e8832a" : "#c9a23a"; g.beginPath(); g.ellipse(cx, by - r * .7, r * 1.15, r * .85, 0, 0, 6.283); g.fill(); g.strokeStyle = "rgba(120,50,0,.35)"; g.lineWidth = 1; for (let a = -1; a <= 1; a++) { g.beginPath(); g.ellipse(cx + a * r * .4, by - r * .7, r * .3, r * .85, 0, 0, 6.283); g.stroke(); } g.fillStyle = "#4a7a2a"; g.fillRect(cx - 1, by - r * 1.55, 3, 4); g.fillStyle = "rgba(255,255,255,.25)"; g.fillRect(cx - r * .7, by - r, 3, 2); } }
+      if (k >= 1) { g.fillStyle = "#fff"; g.font = "bold 10px sans-serif"; g.textAlign = "center"; g.fillText("!", cx, sy - 6 + Math.sin(t / 200) * 2); for (let i = 0; i < 2; i++) { g.fillStyle = "rgba(255,255,220," + (.4 + .4 * Math.sin(t / 180 + i * 2)) + ")"; g.fillRect(cx - 12 + ((t / 60 + i * 17) % 24), sy + 8 + i * 8, 2, 2); } }
+      g.restore();
+    } });
+  });
+  // galinhas
+  const f = FM(); if (f.coop) { const cb = W.obs.find((o) => o.type === "coop"); if (cb) { const n = f.lv >= 2 ? 5 : 3; for (let i = 0; i < n; i++) { const T = Date.now() / 1000, ph = i * 2.1, bx = cb.x + cb.w / 2 + Math.sin(T * .35 + ph) * (50 + i * 9), by = cb.y + cb.h + 22 + Math.cos(T * .27 + ph * 1.3) * 14 + i * 5, fl = Math.cos(T * .35 + ph) < 0; dr.push({ y: by + 8, f: () => { const sx = bx - camera.x, sy = by - camera.y, g = ctx, pk = Math.sin(T * 6 + ph) > .85 ? 3 : 0; g.save(); g.translate(sx, sy); if (fl) g.scale(-1, 1); g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(0, 8, 7, 2.5, 0, 0, 6.283); g.fill(); g.fillStyle = i % 2 ? "#f3ead9" : "#e8b070"; g.beginPath(); g.ellipse(0, 2, 7, 5.5, 0, 0, 6.283); g.fill(); g.beginPath(); g.arc(6, -3 + pk * .3, 3.6, 0, 6.283); g.fill(); g.fillStyle = "#e0453a"; g.fillRect(5, -8 + pk * .3, 3, 2); g.fillStyle = "#f0a020"; g.fillRect(9, -3 + pk * .3, 3, 2); g.fillStyle = "#222"; g.fillRect(7, -4 + pk * .3, 1, 1); g.fillStyle = "#d9a060"; g.fillRect(-9, -1, 4, 5); g.fillStyle = "#f0a020"; g.fillRect(-2, 7, 1, 3); g.fillRect(2, 7, 1, 3); g.restore(); } }); } } }
+  // partículas
+  if (FPART.length) dr.push({ y: 99999, f: () => { const g = ctx, dt = 1 / 60; for (let i = FPART.length - 1; i >= 0; i--) { const q = FPART[i]; q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 160 * dt; if (q.t <= 0) { FPART.splice(i, 1); continue; } g.globalAlpha = Math.min(1, q.t * 2); g.fillStyle = q.c; g.fillRect(q.x - camera.x, q.y - camera.y, 3, 3); } g.globalAlpha = 1; } });
+}
+function farmClearStructs() { for (let i = W.obs.length - 1; i >= 0; i--) if (W.obs[i].fs) W.obs.splice(i, 1); }
+function farmApplyStructs() {
+  const f = FM(); farmClearStructs(); const O = (x, y, w, h, type, ex) => { const o = Object.assign({ x, y, w, h, type, fs: 1 }, ex || {}); W.obs.push(o); return o; };
+  O(655 + FDX, 468 + FDY, 34, 40, "farmsign", { nosolid: true });
+  if (f.coop) O(318 + FDX, 556 + FDY, 76, 60, "coop"); if (f.hive) O(1010 + FDX, 440 + FDY, 30, 36, "hive");
+  if (f.orch) [[420, 880], [500, 880], [580, 880], [420, 950], [500, 950], [580, 950]].forEach((a, i) => O(a[0] + FDX, a[1] + FDY, 44, 56, "orchtree", { idx: i }));
+}
+function farmDaily(days) {
+  const f = FM(); for (let i = 0; i < days; i++) {
+    if (f.coop) f.eggs = Math.min(12, (f.eggs | 0) + (f.lv >= 2 ? 3 : 2)); if (f.hive && ((f.last + i) % 3 === 0)) f.honey = Math.min(6, (f.honey | 0) + 1);
+    if (f.orch && ((f.last + i) % 3 === 0)) f.fruit = (f.fruit || [0, 0, 0, 0, 0, 0]).map((n) => Math.min(3, (n | 0) + 1));
+  }
+}
+function farmStatus() { const f = FM(); return { eggs: f.eggs | 0, honey: f.honey | 0, fruit: (f.fruit || []).reduce((a, b) => a + (b | 0), 0) }; }
+function farm2Near(t, r) { return W.obs.find((o) => o.type === t && rdist(o) < (r || 64)); }
+function farm2Interact() {
+  if (!X.farmIn && false) return false; const f = FM(); let o;
+  if (farm2Near("farmsign", 56)) { farmOpenPanel(); return true; }
+  if (f.coop && farm2Near("coop", 70)) { if ((f.eggs | 0) > 0) { radd("ovo", f.eggs); toast("🥚 Coletou " + f.eggs + " ovos!", 2200); farmBurst(P.x, P.y - 10, "#f3ead9"); f.eggs = 0; } else toast("🐔 As galinhas ainda não botaram ovos hoje. Durma para a fazenda produzir.", 2400); return true; }
+  if (f.hive && farm2Near("hive", 60)) { if ((f.honey | 0) > 0) { radd("mel", f.honey); toast("🍯 Coletou " + f.honey + " mel!", 2200); farmBurst(P.x, P.y - 10, "#e8b030"); f.honey = 0; } else toast("🐝 O mel ainda está sendo feito (3 dias).", 2200); return true; }
+  if (f.orch && farm2Near("orchtree", 70)) { const n = farmStatus().fruit; if (n > 0) { radd("maca", n); f.fruit = f.fruit.map(() => 0); toast("🍎 Colheu " + n + " maçãs do pomar!", 2200); farmBurst(P.x, P.y - 10, "#e0453a"); } else toast("As macieiras ainda estão florindo (3 dias).", 2200); return true; }
+  return false;
+}
+function farm2Hint() { const f = FM(), s = farmStatus(); if (farm2Near("farmsign", 56)) return "[F] 🌾 Painel da Fazenda (ampliar, construir)"; if (f.coop && farm2Near("coop", 70)) return "[F] Galinheiro" + (s.eggs ? " · " + s.eggs + " ovos 🥚" : " (sem ovos ainda)"); if (f.hive && farm2Near("hive", 60)) return "[F] Colmeia" + (s.honey ? " · " + s.honey + " mel 🍯" : " (fazendo mel…)"); if (f.orch && farm2Near("orchtree", 70)) return "[F] Pomar" + (s.fruit ? " · " + s.fruit + " maçãs 🍎" : " (florindo…)"); return ""; }
+function farmInteract() { return farm2Interact() || farmInteract0(); }
+function farmHint() { return farm2Hint() || farmHint0(); }
+// ---------- desenho das construções ----------
+Object.assign(NEWOBS, {
+  farmsign(g, o, sx, sy) { g.fillStyle = "#5c3a1f"; g.fillRect(sx + 14, sy + 14, 6, 26); g.fillStyle = "#9a6a3a"; g.fillRect(sx, sy, 34, 20); g.strokeStyle = "#3a2410"; g.strokeRect(sx + .5, sy + .5, 33, 19); g.fillStyle = "#3f8f35"; g.fillRect(sx + 6, sy + 12, 4, 4); g.fillStyle = "#ffd84a"; g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.fillText("🌾", sx + 17, sy + 14); const bob = Math.sin(Date.now() / 300) * 2; g.fillStyle = "#fff"; g.fillText("!", sx + 17, sy - 4 + bob); },
+  coop(g, o, sx, sy) { const w = o.w, h = o.h; g.fillStyle = "#6b4a2a"; g.fillRect(sx, sy + h * .35, w, h * .65); g.fillStyle = "#8a6238"; for (let i = 0; i < 6; i++) g.fillRect(sx + 2 + i * 12, sy + h * .38, 2, h * .6); g.fillStyle = "#b5483a"; g.beginPath(); g.moveTo(sx - 6, sy + h * .4); g.lineTo(sx + w / 2, sy); g.lineTo(sx + w + 6, sy + h * .4); g.closePath(); g.fill(); g.fillStyle = "#8a3328"; g.beginPath(); g.moveTo(sx + w / 2, sy); g.lineTo(sx + w + 6, sy + h * .4); g.lineTo(sx + w / 2 + 4, sy + h * .4); g.closePath(); g.fill(); g.fillStyle = "#2a1a0e"; g.fillRect(sx + w * .4, sy + h * .62, 16, h * .38); g.fillStyle = "#e8d8b0"; g.fillRect(sx + 8, sy + h * .5, 12, 10); g.fillStyle = "#c9a23a"; g.fillRect(sx + 9, sy + h * .5 + 3, 10, 2); const f = FM(); if ((f.eggs | 0) > 0) { g.fillStyle = "#fff"; g.font = "bold 11px sans-serif"; g.textAlign = "center"; g.fillText("🥚", sx + w / 2, sy - 6 + Math.sin(Date.now() / 250) * 2); } },
+  hive(g, o, sx, sy) { g.fillStyle = "#5c3a1f"; g.fillRect(sx + 4, sy + 26, 4, 10); g.fillRect(sx + 22, sy + 26, 4, 10); g.fillStyle = "#e8b030"; for (let i = 0; i < 3; i++) { g.beginPath(); g.ellipse(sx + 15, sy + 22 - i * 7, 12 - i, 5, 0, 0, 6.283); g.fill(); } g.fillStyle = "#a87818"; g.fillRect(sx + 11, sy + 20, 8, 4); const T = Date.now() / 1000; g.fillStyle = "#222"; for (let i = 0; i < 3; i++) g.fillRect(sx + 15 + Math.cos(T * 3 + i * 2) * 20, sy + 6 + Math.sin(T * 4 + i * 2) * 8, 2, 2); if ((FM().honey | 0) > 0) { g.fillStyle = "#fff"; g.font = "bold 11px sans-serif"; g.textAlign = "center"; g.fillText("🍯", sx + 15, sy - 8 + Math.sin(Date.now() / 250) * 2); } },
+  orchtree(g, o, sx, sy) { const f = FM(), n = (f.fruit && f.fruit[o.idx]) | 0; drawTreeNice(g, "tree_fruit", sx, sy, o.w, o.h, { x: o.x, y: o.y, done: n <= 0, orch: n }); },
+});
+// ---------- árvores bonitas ----------
+function drawTreeNice(g, t, sx, sy, w, h, p) {
+  const T = Date.now() / 1000, ph = p.x * .013 + p.y * .007, sw = Math.sin(T * 1.1 + ph) * 1.5, cx = sx + w / 2, S = season().id, win = S === "inverno";
+  g.save(); g.fillStyle = "rgba(0,0,0,.22)"; g.beginPath(); g.ellipse(cx + 5, sy + h - 2, w * .5, h * .1, 0, 0, 6.283); g.fill();
+  const trunk = (tw, th) => { g.fillStyle = "#4a3118"; g.beginPath(); g.moveTo(cx - tw, sy + h); g.lineTo(cx - tw * .55, sy + h - th); g.lineTo(cx + tw * .55, sy + h - th); g.lineTo(cx + tw, sy + h); g.closePath(); g.fill(); g.fillStyle = "#6b4a2a"; g.beginPath(); g.moveTo(cx - tw * .3, sy + h); g.lineTo(cx - tw * .2, sy + h - th); g.lineTo(cx + tw * .55, sy + h - th); g.lineTo(cx + tw, sy + h); g.closePath(); g.fill(); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(cx - tw * .2, sy + h - th * .6, 1, th * .3); g.fillRect(cx + tw * .2, sy + h - th * .8, 1, th * .3); g.fillStyle = "#4a3118"; g.fillRect(cx - tw - 2, sy + h - 2, 4, 2); g.fillRect(cx + tw - 2, sy + h - 2, 4, 2); };
+  if (t === "tree_fruit") {
+    trunk(w * .1, h * .42);
+    const pal = S === "outono" ? ["#9a4f14", "#c9791f", "#e8b040"] : win ? ["#4a6a5a", "#6f8f80", "#d8e8f0"] : S === "primavera" ? ["#2f7a3a", "#4aa046", "#8fd45a"] : ["#2a6a32", "#3f8a3f", "#6dbb4a"];
+    const blobs = [[-.22, .38, .26], [.22, .38, .26], [0, .22, .3], [-.12, .1, .22], [.14, .12, .2]]; const cy = sy + h * .3;
+    [0, 1, 2].forEach((layer) => { g.fillStyle = pal[layer]; blobs.forEach((b, i) => { const k = layer === 0 ? 0 : layer === 1 ? -w * .035 : -w * .07, kk = layer === 0 ? 0 : layer === 1 ? -h * .03 : -h * .06, r = b[2] * w * (layer === 2 ? .55 : layer === 1 ? .8 : 1); g.beginPath(); g.arc(cx + b[0] * w + sw * (1 - b[1]) + k, cy + (b[1] - .3) * h + kk, r, 0, 6.283); g.fill(); }); });
+    if (win) { g.fillStyle = "#f4faff"; blobs.forEach((b) => { g.beginPath(); g.ellipse(cx + b[0] * w + sw, cy + (b[1] - .3) * h - b[2] * w * .75, b[2] * w * .6, b[2] * w * .22, 0, 0, 6.283); g.fill(); }); }
+    if (S === "primavera") { g.fillStyle = "#ffd6ea"; [[-.3, .3], [.2, .2], [0, .4], [.3, .42], [-.1, .1], [-.28, .45]].forEach((a, i) => { g.beginPath(); g.arc(cx + a[0] * w + sw, sy + a[1] * h, 2.4 + (i % 2), 0, 6.283); g.fill(); }); }
+    if (!p.done && !win) { const nF = p.orch ? 3 + p.orch * 2 : 5, pos = [[-.28, .34], [.22, .42], [.02, .22], [.3, .26], [-.12, .46], [-.34, .2], [.12, .08]]; pos.slice(0, nF).forEach((a) => { g.fillStyle = "#c63a30"; g.beginPath(); g.arc(cx + a[0] * w + sw * .8, sy + a[1] * h, 3.4, 0, 6.283); g.fill(); g.fillStyle = "rgba(255,255,255,.55)"; g.fillRect(cx + a[0] * w + sw * .8 - 1.5, sy + a[1] * h - 1.5, 1.5, 1.5); }); }
+    if (p.orch > 0) { g.fillStyle = "#fff"; g.font = "bold 10px sans-serif"; g.textAlign = "center"; g.fillText("!", cx, sy - 3 + Math.sin(T * 5) * 2); }
+  } else {
+    trunk(w * .09, h * .22);
+    const dk = win ? "#3a5a58" : S === "outono" ? "#2f5a33" : "#1f4a2e", md = win ? "#5a8a82" : "#2f6a3a", lt = win ? "#8fbab2" : "#4a8f48";
+    [[.0, .52, .46, .34], [.0, .34, .38, .3], [.0, .12, .28, .26]].forEach((tier, i) => { const off = sw * (1 + i * .5) * .6, y0 = sy + h * tier[1], bw = w * tier[2], th = h * tier[3]; g.fillStyle = dk; g.beginPath(); g.moveTo(cx + off, y0 - th * .2); g.lineTo(cx + bw + off * .3, y0 + th); g.lineTo(cx - bw + off * .3, y0 + th); g.closePath(); g.fill(); g.fillStyle = md; g.beginPath(); g.moveTo(cx + off, y0 - th * .2); g.lineTo(cx + bw * .2 + off * .3, y0 + th * .5); g.lineTo(cx - bw + off * .3, y0 + th); g.lineTo(cx - bw * .15 + off * .3, y0 + th); g.closePath(); g.fill(); g.fillStyle = lt; g.beginPath(); g.moveTo(cx + off, y0 - th * .2); g.lineTo(cx - bw * .5 + off * .3, y0 + th * .55); g.lineTo(cx - bw * .2 + off * .3, y0 + th * .55); g.closePath(); g.fill(); if (win) { g.fillStyle = "#f4faff"; g.beginPath(); g.moveTo(cx + off, y0 - th * .2); g.lineTo(cx + bw * .45 + off * .3, y0 + th * .38); g.lineTo(cx - bw * .45 + off * .3, y0 + th * .38); g.closePath(); g.fill(); } });
+  }
+  g.restore();
+}
+// ---------- painel da fazenda ----------
+function fcost(c) { return (c.g ? c.g + " 🪙" : "") + (c.madeira ? " · " + c.madeira + " 🪵" : "") + (c.ferro ? " · " + c.ferro + " ⚙️" : ""); }
+function fcan(c) { return gold >= (c.g || 0) && rs("madeira") >= (c.madeira || 0) && rs("ferro") >= (c.ferro || 0) || X.testMode; }
+function fpay(c) { if (!X.testMode) { gold -= c.g || 0; if (c.madeira) radd("madeira", -c.madeira); if (c.ferro) radd("ferro", -c.ferro); } }
+function farmPanelHTML() {
+  const f = FM(), d = FDIM[f.lv], n = W.plots.filter((p) => !plotLocked(p)).length, st = farmStatus();
+  let s = "<h2>🌾 Painel da Fazenda</h2><p class='lead'>Horta: <b>" + d[0] + "×" + d[1] + "</b> (" + n + " canteiros) · 🪙 " + Math.floor(gold) + " · 🪵 " + rs("madeira") + " · ⚙️ " + rs("ferro") + "</p><div class='cards' style='grid-template-columns:1fr;max-height:none'>";
+  if (f.lv < 3) { const c = FUP[f.lv], nd = FDIM[f.lv + 1]; s += "<div class='card'><h3>🌱 Ampliar horta → " + nd[0] + "×" + nd[1] + "</h3><p class='mini'>+" + (nd[0] * nd[1] - d[0] * d[1]) + " canteiros. Custo: " + fcost(c) + "</p><button data-f='up'" + (fcan(c) ? "" : " disabled") + ">Ampliar</button></div>"; } else s += "<div class='card'><h3>🌱 Horta no tamanho máximo (8×6)</h3></div>";
+  Object.keys(FBUILD).forEach((k) => { const b = FBUILD[k]; s += "<div class='card'><h3>" + b.nm + (f[k] ? " ✅" : "") + "</h3><p class='mini'>" + b.d + (f[k] ? "" : " Custo: " + fcost(b)) + "</p>" + (f[k] ? (k === "coop" ? "<p class='mini'>Ovos prontos: " + st.eggs + "</p>" : k === "hive" ? "<p class='mini'>Mel pronto: " + st.honey + "</p>" : k === "orch" ? "<p class='mini'>Maçãs prontas: " + st.fruit + "</p>" : "<p class='mini'>Ativo.</p>") : "<button data-f='b' data-k='" + k + "'" + (fcan(b) ? "" : " disabled") + ">Construir</button>") + "</div>"; });
+  s += "<div class='card'><h3>🌰 Sementes</h3><p class='mini'>" + CROP_LIST.map((k) => RES[k].ic + " " + sdn(k)).join(" · ") + "<br>Compre mais no Armazém Tribal. Escolha qual plantar:</p><div class='row'>" + CROP_LIST.map((k) => "<button data-f='sel' data-k='" + k + "' class='" + (selSeed() === k ? "" : "ghost") + "'>" + RES[k].ic + " " + CROPS[k].n.split(" ")[0] + "</button>").join("") + "</div></div>";
+  return s + "</div><div class='row' style='margin-top:6px'><button class='ghost' data-f='close'>Fechar (Esc)</button></div>";
+}
+function farmOpenPanel() { if (ui !== null) return; ui = "farmup"; const o = document.getElementById("overlay-farm"); o.innerHTML = farmPanelHTML(); o.classList.remove("hidden"); }
+function farmClosePanel() { const o = document.getElementById("overlay-farm"); if (o) o.classList.add("hidden"); if (ui === "farmup") ui = null; saveGame(); }
+function farmPanelClick(e) {
+  const b = e.target.closest && e.target.closest("[data-f]"); if (!b || b.disabled) return; const a = b.getAttribute("data-f"), k = b.getAttribute("data-k"), f = FM();
+  if (a === "close") { farmClosePanel(); return; }
+  if (a === "up" && f.lv < 3 && fcan(FUP[f.lv])) { fpay(FUP[f.lv]); f.lv++; farmApplyStructs(); toast("🌾 Horta ampliada para " + FDIM[f.lv][0] + "×" + FDIM[f.lv][1] + "!", 3000); }
+  if (a === "b" && !f[k] && fcan(FBUILD[k])) { fpay(FBUILD[k]); f[k] = true; farmApplyStructs(); if (k === "orch") f.fruit = [1, 1, 1, 1, 1, 1]; toast(FBUILD[k].nm + " construído!", 2600); }
+  if (a === "sel") X.selSeed = k;
+  document.getElementById("overlay-farm").innerHTML = farmPanelHTML();
+}
+function farmTestAll() { const f = FM(); f.lv = 3; f.sprink = f.coop = f.hive = f.orch = true; CROP_LIST.forEach((k) => { X.seed[k] = Math.max(X.seed[k] | 0, 99); }); farmApplyStructs(); }
+// ---------- ciclo ----------
+let _fd = null;
+setInterval(() => {
+  if (!started || !X) return; const f = FM(), d = X.day || 1; if (_fd === null) _fd = d; else if (d !== _fd) { const n = d - _fd; _fd = d; if (n > 0 && n < 10) { farmDaily(n); f.last = d; } }
+  if (f.sprink && scene === "world" && W.plots) W.plots.forEach((p) => { if (p.type && p.w < 30) p.w = 60; });
+}, 500);
+function farm2Init() {
+  const st = document.createElement("style"); st.textContent = "#overlay-farm .card{text-align:left;background:#211b15;border:1px solid #4a3d2e;border-radius:10px;padding:10px 12px;width:min(620px,100%)}#overlay-farm h3{margin:0 0 4px;color:#ffd84a}#overlay-farm .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#overlay-farm{justify-content:flex-start;z-index:21}#overlay-farm button[disabled]{opacity:.45}"; document.head.appendChild(st);
+  const o = document.createElement("div"); o.id = "overlay-farm"; o.className = "overlay hidden"; el["overlay-start"].parentNode.appendChild(o); o.addEventListener("click", farmPanelClick);
+  window.addEventListener("keydown", (e) => { if (e.code === "Escape" && ui === "farmup") { e.stopImmediatePropagation(); farmClosePanel(); } }, true);
+  FM(); farmApplyStructs();
+  if (window.PV) Object.assign(window.PV, { FM, farmOpenPanel, farmApplyStructs, farmDaily, farmStatus, farmTestAll, plotLocked, CROPS, W: () => W });
+}
+
+// ============================================================
+// pv25: rios, lagos, pontes, estradas bonitas e a ilha do Vale Lareira (geografia)
+// ============================================================
+var FDX = 4900, FDY = 0;
+var VALE = { x: 5680, y: 600, rx: 900, ry: 620 }, HOME_SPOT = { x: 5420, y: 420 };
+var RIVERS = [
+  { id: "mansinho", w: 56, pts: [[1000, -60], [1040, 160], [1012, 330], [962, 520], [1000, 700], [1092, 880], [1132, 1060], [1150, 1170]] },
+  { id: "lareira", w: 44, pts: [[6290, -40], [6250, 260], [6300, 600], [6210, 900], [6160, 1120], [6150, 1300]] },
+];
+var LAKES = [
+  { x: 1170, y: 1200, rx: 210, ry: 110 }, { x: 560, y: 830, rx: 112, ry: 62 }, { x: 1850, y: 985, rx: 160, ry: 92 },
+];
+var BRIDGES = [
+  { id: "ponte_norte", x: 960, y: 274, w: 112, h: 56, kind: "wood", dir: "ew" },
+  { id: "ponte_pedra", x: 896, y: 528, w: 140, h: 66, kind: "stone", dir: "ew" },
+  { id: "ponte_sul", x: 1034, y: 858, w: 124, h: 56, kind: "rope", dir: "ew" },
+  { id: "ponte_vale", x: 6240, y: 562, w: 120, h: 56, kind: "wood", dir: "ew" },
+];
+function _segD(x, y, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; let t = ((x - a[0]) * dx + (y - a[1]) * dy) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(x - (a[0] + dx * t), y - (a[1] + dy * t)); }
+function onBridge(x, y) { for (let i = 0; i < BRIDGES.length; i++) { const b = BRIDGES[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return true; } return false; }
+function riverAt(x, y) {
+  if (!((x < 2400 && y < 1400) || x > 4700)) return false;
+  let wet = false;
+  for (let i = 0; i < RIVERS.length && !wet; i++) { const r = RIVERS[i], hw = r.w / 2 + (vnoise(x / 70 + i * 9, y / 70) - .5) * 10; if (x < r.pts[0][0] - 400 && i === 0) continue; for (let j = 1; j < r.pts.length; j++) if (_segD(x, y, r.pts[j - 1], r.pts[j]) < hw) { wet = true; break; } }
+  if (!wet) for (let i = 0; i < LAKES.length; i++) { const l = LAKES[i], dx = (x - l.x) / l.rx, dy = (y - l.y) / l.ry; if (dx * dx + dy * dy < 1 + (vnoise(x / 60, y / 60) - .5) * .25) { wet = true; break; } }
+  return wet && !onBridge(x, y);
+}
+function riverBlocked(x, y, w, h) { const a = w * .42, b = h * .42; return riverAt(x, y) || riverAt(x - a, y - b) || riverAt(x + a, y - b) || riverAt(x - a, y + b) || riverAt(x + a, y + b); }
+function valeD(x, y) { const dx = (x - VALE.x) / VALE.rx, dy = (y - VALE.y) / VALE.ry, e = Math.hypot(dx, dy); return (1 - e) * 600 - (vnoise(x / 320, y / 320) - .5) * 150 - (vnoise(x / 110, y / 110) - .5) * 40; }
+Object.assign(SHADES, { river: ["#3b9cc4", "#3496c0", "#40a2cc"] });
+// ---------- desenho ----------
+function drawRoadsNice() {
+  const g = ctx; g.save(); g.lineCap = "round"; g.lineJoin = "round";
+  W.roads.forEach((r) => {
+    let hit = false; for (let i = 0; i < r.length; i++) { const px = r[i][0] - camera.x, py = r[i][1] - camera.y; if (px > -300 && px < VIEW_W + 300 && py > -300 && py < VIEW_H + 300) { hit = true; break; } } if (!hit) return;
+    const path = () => { g.beginPath(); r.forEach((pt, i) => { if (i) g.lineTo(pt[0] - camera.x, pt[1] - camera.y); else g.moveTo(pt[0] - camera.x, pt[1] - camera.y); }); };
+    path(); g.strokeStyle = "rgba(60,40,20,.28)"; g.lineWidth = 44; g.stroke(); path(); g.strokeStyle = "#8f7852"; g.lineWidth = 34; g.stroke(); path(); g.strokeStyle = "#b39b72"; g.lineWidth = 28; g.stroke(); path(); g.strokeStyle = "#c8b286"; g.lineWidth = 16; g.stroke();
+    path(); g.strokeStyle = "rgba(90,70,40,.35)"; g.lineWidth = 2; g.setLineDash([3, 11]); g.lineDashOffset = 0; g.stroke(); g.setLineDash([]);
+  }); g.restore();
+}
+NEWOBS.bridge = function (g, o, sx, sy) {
+  const w = o.w, h = o.h, B = o.kind || "wood", stone = B === "stone", rope = B === "rope";
+  g.save(); g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(sx + 4, sy + h - 4, w - 8, 10);
+  g.fillStyle = stone ? "#8d8c94" : rope ? "#8a6a3c" : "#7a5230"; g.fillRect(sx, sy + 8, w, h - 16);
+  for (let x = 4; x < w - 2; x += 10) { g.fillStyle = stone ? (x % 20 ? "#a2a1aa" : "#9a99a2") : (x % 20 ? "#a06a3a" : "#94622f"); g.fillRect(sx + x, sy + 8, 8, h - 16); g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(sx + x + 8, sy + 8, 2, h - 16); }
+  g.fillStyle = stone ? "#6c6b74" : "#4a2f18"; g.fillRect(sx, sy + 2, w, 7); g.fillRect(sx, sy + h - 11, w, 7);
+  g.fillStyle = stone ? "#7a7983" : "#5c3a1f"; for (let x = 0; x <= w - 6; x += stone ? 22 : 28) { g.fillRect(sx + x, sy - 4, 6, 14); g.fillRect(sx + x, sy + h - 14, 6, 14); }
+  if (rope) { g.strokeStyle = "#c9b27a"; g.lineWidth = 1.5; g.beginPath(); for (let x = 0; x <= w; x += 28) { g.moveTo(sx + x, sy - 2); g.quadraticCurveTo(sx + x + 14, sy + 4, sx + x + 28, sy - 2); g.moveTo(sx + x, sy + h - 6); g.quadraticCurveTo(sx + x + 14, sy + h, sx + x + 28, sy + h - 6); } g.stroke(); }
+  g.restore();
+};
+Object.assign(FLATOBS, { bridge: 1, steps: 1, plaza: 1, flowerbed: 1, dockflat: 1 });
+// ondulações dos rios
+function riverFx() {
+  const g = ctx, t = Date.now() / 1000; if (camera.x > 2600 && camera.x < 4400) return; g.save(); g.lineWidth = 1.4;
+  for (let j = Math.floor(camera.y / 30); j < (camera.y + VIEW_H) / 30; j++) for (let i = Math.floor(camera.x / 30); i < (camera.x + VIEW_W) / 30; i++) {
+    const h = _vh(i + 500, j), wx = i * 30 + h * 26, wy = j * 30 + _vh(j, i + 500) * 26; if (h > .5 || !riverAt(wx, wy)) continue;
+    const a = .5 + .5 * Math.sin(t * 1.6 + h * 30); g.strokeStyle = "rgba(255,255,255," + (a * .32).toFixed(2) + ")"; const sx = wx - camera.x, sy = wy - camera.y; g.beginPath(); g.moveTo(sx - 7, sy); g.quadraticCurveTo(sx - 3, sy - 3, sx, sy); g.quadraticCurveTo(sx + 3, sy + 3, sx + 7, sy); g.stroke();
+  } g.restore();
+}
+
+// ============================================================
+// pv26: Vale Lareira — a fazenda numa ilha à parte, alcançada pelo Arco da Lareira
+// ============================================================
+var VILLAGE_ARCH = { x: 370, y: 40, w: 120, h: 110 }, VALE_ARCH = { x: 4990, y: 520, w: 120, h: 110 };
+const ARR_VALE = { x: 5160, y: 612 }, ARR_VILA = { x: 430, y: 235 };
+function buildVale(Wd) {
+  const O = (x, y, w, h, type, ex) => { const o = Object.assign({ x, y, w, h, type, vale: 1 }, ex || {}); Wd.obs.push(o); return o; };
+  O(VALE_ARCH.x, VALE_ARCH.y, VALE_ARCH.w, VALE_ARCH.h, "valearch", { nosolid: true, to: "vila" });
+  O(VALE_ARCH.x - 10, VALE_ARCH.y + 70, 150, 90, "plaza", { nosolid: true });
+  O(5560, 220, 60, 90, "memorial", { nosolid: false, memo: true }); O(5300, 300, 70, 40, "bench", { nosolid: true });
+  O(6090, 270, 92, 128, "windmill", {}); O(6150, 410, 40, 30, "hay", { nosolid: true }); O(6190, 430, 40, 30, "hay", { nosolid: true });
+  O(5060, 700, 140, 40, "sign", { nosolid: true, label: "← Arco da Lareira" });
+  [[5330, 392], [5520, 392], [5480, 740], [5590, 800], [5260, 590], [6110, 620], [6060, 520]].forEach((a, i) => O(a[0], a[1], 70, 34, "flowerbed", { nosolid: true, c: i }));
+  [[5180, 590], [5250, 566], [5320, 520], [5390, 440], [5470, 440], [5560, 480], [5700, 480], [5820, 420], [5950, 430], [6080, 480], [6180, 550], [6320, 560], [6420, 545]].forEach((a) => O(a[0] - 8, a[1] - 40, 16, 44, "lamp", { nosolid: true }));
+  Wd.roads.push([[5110, 612], [5240, 590], [5340, 505], [5410, 405]], [[5410, 405], [5500, 470], [5640, 500], [5700, 540]], [[5430, 420], [5600, 395], [5800, 410], [5880, 400]], [[5880, 400], [6010, 420], [6150, 520], [6200, 568], [6300, 590], [6440, 560]], [[6150, 520], [6130, 410], [6125, 380]], [[5410, 405], [5330, 330], [5320, 270], [5420, 250]], [[5330, 330], [5560, 300], [5590, 320]]);
+  // vegetação do vale (determinística)
+  seedRnd(8181); let n = 0; const sd = () => rnd();
+  for (let i = 0; i < 140; i++) { const x = 4880 + sd() * 1640, y = 20 + sd() * 1200; if (biomeAt(x, y) !== "farm") continue; if (Wd.obs.some((o) => x > o.x - 60 && x < o.x + o.w + 60 && y > o.y - 50 && y < o.y + o.h + 50)) continue; if (Wd.props.some((q) => Math.abs(q.x - x) < 70 && Math.abs(q.y - y) < 70)) continue; if (Wd.plots.some((q) => Math.abs(q.x - x) < 120 && Math.abs(q.y - y) < 120)) continue; let near = false; for (let k = 0; k < Wd.roads.length && !near; k++) { const r = Wd.roads[k]; for (let j = 1; j < r.length; j++) if (_segD(x, y, r[j - 1], r[j]) < 46) { near = true; break; } } if (near) continue; if (Math.hypot(x - 5690, y - 620) < 330 && y > 460 && y < 900) continue; const tp = sd(); Wd.props.push(mkProp({ id: "vt" + (n++), type: tp < .42 ? "tree_pine" : "tree_fruit", x, y, w: 48, h: 60, chance: .3 })); }
+  Wd.fish.push({ x: 6270, y: 760, kind: "coast" }, { x: 6190, y: 980, kind: "coast" });
+}
+Object.assign(NEWOBS, {
+  valearch(g, o, sx, sy) {
+    const w = o.w, h = o.h, t = Date.now() / 1000; g.save(); g.fillStyle = "rgba(0,0,0,.22)"; g.beginPath(); g.ellipse(sx + w / 2, sy + h - 4, w * .5, 12, 0, 0, 6.283); g.fill();
+    g.fillStyle = "#7d7a86"; g.fillRect(sx + 4, sy + 24, 22, h - 26); g.fillRect(sx + w - 26, sy + 24, 22, h - 26); g.fillStyle = "#9a97a6"; g.fillRect(sx + 4, sy + 24, 8, h - 26); g.fillRect(sx + w - 26, sy + 24, 8, h - 26);
+    g.fillStyle = "#8d8a98"; g.beginPath(); g.moveTo(sx, sy + 34); g.quadraticCurveTo(sx + w / 2, sy - 24, sx + w, sy + 34); g.lineTo(sx + w - 18, sy + 40); g.quadraticCurveTo(sx + w / 2, sy - 2, sx + 18, sy + 40); g.closePath(); g.fill();
+    g.fillStyle = "#b0adbc"; g.fillRect(sx + w / 2 - 6, sy + 2, 12, 12);
+    const gl = .55 + .25 * Math.sin(t * 2); const gr = g.createRadialGradient(sx + w / 2, sy + h * .62, 4, sx + w / 2, sy + h * .62, 44); gr.addColorStop(0, "rgba(255,225,140," + gl.toFixed(2) + ")"); gr.addColorStop(1, "rgba(255,225,140,0)"); g.fillStyle = gr; g.fillRect(sx + 20, sy + 30, w - 40, h - 34);
+    g.fillStyle = "#ffe08a"; g.font = "bold 9px sans-serif"; g.textAlign = "center"; for (let i = 0; i < 3; i++) g.fillText(["ᛉ", "ᛟ", "ᚠ"][i], sx + 14 + i * ((w - 28) / 2), sy + 40 + Math.sin(t + i) * 2);
+    g.restore();
+  },
+  windmill(g, o, sx, sy) {
+    const w = o.w, h = o.h, t = Date.now() / 1000, cx = sx + w / 2; g.save(); g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(cx, sy + h - 2, w * .55, 8, 0, 0, 6.283); g.fill();
+    g.fillStyle = "#c9b48a"; g.beginPath(); g.moveTo(sx + 10, sy + h); g.lineTo(sx + w - 10, sy + h); g.lineTo(sx + w - 24, sy + 36); g.lineTo(sx + 24, sy + 36); g.closePath(); g.fill(); g.fillStyle = "#a89468"; g.beginPath(); g.moveTo(cx, sy + h); g.lineTo(sx + w - 10, sy + h); g.lineTo(sx + w - 24, sy + 36); g.lineTo(cx, sy + 36); g.closePath(); g.fill();
+    g.fillStyle = "#7a3b2a"; g.beginPath(); g.moveTo(sx + 16, sy + 38); g.lineTo(cx, sy + 8); g.lineTo(sx + w - 16, sy + 38); g.closePath(); g.fill(); g.fillStyle = "#4a2f18"; g.fillRect(cx - 7, sy + h - 26, 14, 26); g.fillStyle = "#6fb0d8"; g.fillRect(cx - 5, sy + 58, 10, 12);
+    g.translate(cx, sy + 34); g.rotate(t * .8); for (let i = 0; i < 4; i++) { g.rotate(1.5708); g.fillStyle = "#5c3a1f"; g.fillRect(-2, 0, 4, 52); g.fillStyle = "#f0e6c8"; g.fillRect(2, 8, 14, 40); g.strokeStyle = "#a89468"; g.strokeRect(2.5, 8.5, 13, 39); } g.fillStyle = "#3a2410"; g.beginPath(); g.arc(0, 0, 5, 0, 6.283); g.fill(); g.restore();
+  },
+  memorial(g, o, sx, sy) {
+    const w = o.w, h = o.h, t = Date.now() / 1000; g.save(); g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(sx + w / 2, sy + h - 2, w * .6, 8, 0, 0, 6.283); g.fill();
+    g.fillStyle = "#8d8a98"; g.fillRect(sx + 8, sy + h - 22, w - 16, 20); g.fillStyle = "#a7a4b3"; g.beginPath(); g.moveTo(sx + 16, sy + h - 20); g.lineTo(sx + 16, sy + 22); g.quadraticCurveTo(sx + w / 2, sy - 2, sx + w - 16, sy + 22); g.lineTo(sx + w - 16, sy + h - 20); g.closePath(); g.fill(); g.fillStyle = "#6c6a78"; g.font = "bold 8px serif"; g.textAlign = "center"; g.fillText("VOVÓ", sx + w / 2, sy + 40); g.fillText("ESTELÁRIA", sx + w / 2, sy + 50);
+    g.fillStyle = "#d9a8c8"; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(sx + 10 + i * 8, sy + h - 6 + Math.sin(t + i) * .8, 3, 0, 6.283); g.fill(); } g.fillStyle = "rgba(255,230,160," + (.5 + .3 * Math.sin(t * 2)).toFixed(2) + ")"; g.beginPath(); g.arc(sx + w / 2, sy + 12, 4, 0, 6.283); g.fill(); g.restore();
+  },
+  bench(g, o, sx, sy) { g.fillStyle = "#4a2f18"; g.fillRect(sx + 4, sy + 24, 4, 12); g.fillRect(sx + o.w - 8, sy + 24, 4, 12); g.fillStyle = "#8a5a34"; g.fillRect(sx, sy + 16, o.w, 10); g.fillRect(sx, sy + 4, o.w, 7); },
+  hay(g, o, sx, sy) { g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h - 2, o.w * .5, 6, 0, 0, 6.283); g.fill(); g.fillStyle = "#d9b84a"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h / 2, o.w / 2, o.h / 2, 0, 0, 6.283); g.fill(); g.strokeStyle = "#b38f2a"; g.lineWidth = 1; for (let i = 0; i < 5; i++) { g.beginPath(); g.moveTo(sx + 6 + i * 7, sy + 6); g.lineTo(sx + 4 + i * 7, sy + o.h - 6); g.stroke(); } },
+  flowerbed(g, o, sx, sy) { g.fillStyle = "rgba(60,38,20,.6)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h / 2, o.w / 2, o.h / 2, 0, 0, 6.283); g.fill(); const cs = [["#ff8ab8", "#ffd84a"], ["#b58aff", "#fff"], ["#ff7a5a", "#ffe27a"], ["#6bd0ff", "#fff"]][(o.c | 0) % 4]; for (let i = 0; i < 9; i++) { const x = sx + 8 + (i % 5) * (o.w - 16) / 4, y = sy + 8 + ((i * 7) % 3) * (o.h - 16) / 2 + (i % 2) * 3; g.fillStyle = "#3f8f35"; g.fillRect(x, y + 2, 1.5, 6); g.fillStyle = cs[i % 2]; g.beginPath(); g.arc(x + .7, y, 3, 0, 6.283); g.fill(); } },
+  lamp(g, o, sx, sy) { const night = (dayT / 200); const dark = (1 - Math.cos(night * 6.283)) / 2; g.fillStyle = "#3a3a44"; g.fillRect(sx + 6, sy + 10, 4, 34); g.fillRect(sx + 3, sy + 40, 10, 4); g.fillStyle = "#2a2a32"; g.fillRect(sx + 2, sy + 4, 12, 8); g.fillStyle = dark > .35 ? "#ffe08a" : "#9a8a5a"; g.fillRect(sx + 4, sy + 6, 8, 5); if (dark > .35) { const gr = g.createRadialGradient(sx + 8, sy + 9, 2, sx + 8, sy + 9, 46); gr.addColorStop(0, "rgba(255,220,130," + (.42 * Math.min(1, dark * 1.4)).toFixed(2) + ")"); gr.addColorStop(1, "rgba(255,220,130,0)"); g.fillStyle = gr; g.fillRect(sx - 40, sy - 36, 96, 90); } },
+  steps(g, o, sx, sy) { const n = 6; for (let i = 0; i < n; i++) { const y = sy + o.h - (i + 1) * (o.h / n), w = o.w - i * 6; g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(sx + (o.w - w) / 2, y + o.h / n - 3, w, 3); g.fillStyle = i % 2 ? "#a09db0" : "#aaa7ba"; g.fillRect(sx + (o.w - w) / 2, y, w, o.h / n - 2); } },
+  plaza(g, o, sx, sy) { g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(sx + 3, sy + 3, o.w, o.h); for (let j = 0; j < o.h; j += 14) for (let i = 0; i < o.w; i += 18) { g.fillStyle = ((i / 18 + j / 14) & 1) ? "#a9a6b6" : "#9a97a8"; g.fillRect(sx + i + (j / 14 & 1) * 6, sy + j, 17, 13); } g.strokeStyle = "rgba(0,0,0,.25)"; g.strokeRect(sx + .5, sy + .5, o.w - 1, o.h - 1); },
+});
+// ---------- portais: Arco da Lareira ----------
+let _portalCd = 0;
+function useArch(to) {
+  if (CUT || ui !== null || _portalCd > Date.now()) return; _portalCd = Date.now() + 3000;
+  const toVale = to === "vale", dst = toVale ? ARR_VALE : ARR_VILA;
+  startCut([{ bars: 1, fade: [1, .7] }, { tp: [dst.x, dst.y], cam: [dst.x, dst.y], cd: .01, d: .3 }, { title: toVale ? "Vale Lareira" : "Vila Tribal", sub: toVale ? "Um lugar à parte, guardado pela Vovó" : "Onde as histórias são guardadas", d: 2.4, fade: [0, 1.1] }, { bars: 0 }]);
+}
+setInterval(() => {
+  if (!started || scene !== "world" || CUT || ui !== null || X.farmIn) return;
+  if (P.x > VILLAGE_ARCH.x + 10 && P.x < VILLAGE_ARCH.x + VILLAGE_ARCH.w - 10 && P.y > VILLAGE_ARCH.y + 44 && P.y < VILLAGE_ARCH.y + 96) useArch("vale");
+  else if (P.x > VALE_ARCH.x + 10 && P.x < VALE_ARCH.x + VALE_ARCH.w - 10 && P.y > VALE_ARCH.y + 40 && P.y < VALE_ARCH.y + 100) useArch("vila");
+}, 120);
+
+// ============================================================
+// pv27: Vila Tribal grande — casas, praça, mercado, rio com pontes, caminhos, moradores
+// ============================================================
+const NPC_BASE = (id, nome, x, y, main, dark, collar, lines, ex) => mkNPC(Object.assign({ id, nome, x, y, main, dark, collar, lines, r: 36 }, ex || {}));
+const DOORX = (x, w) => x + Math.round(w / 2) - 16;
+function houseDef(id, x, y, w, h, v, title, interior, ex) { return { id, x, y, w, h, v, title, interior, ex }; }
+const HOUSES = [
+  houseDef("curandeira", 540, 170, 130, 108, 0, "Casa da Curandeira"), houseDef("padaria", 690, 104, 140, 100, 1, "Padaria Pão-de-Osso"), houseDef("cacador", 850, 160, 130, 100, 2, "Cabana do Caçador"),
+  houseDef("tecelao", 330, 380, 130, 108, 3, "Casa da Tecelã"), houseDef("escola", 520, 360, 220, 150, 4, "Escola da Vila", null, { big: 1 }), houseDef("pescador", 340, 700, 130, 100, 2, "Cabana do Pescador"),
+  houseDef("idosos", 790, 700, 130, 108, 0, "Casa dos Idosos"), houseDef("cartografo", 1090, 120, 130, 100, 3, "Casa do Cartógrafo"), houseDef("comunal", 1170, 730, 220, 140, 4, "Casa Comunal", null, { big: 1 }),
+  houseDef("taverna", 1990, 700, 200, 150, 1, "Taverna Osso Quente", null, { big: 1 }), houseDef("barqueiro", 2040, 900, 140, 100, 2, "Casa do Barqueiro"), houseDef("oficina", 1740, 840, 160, 110, 3, "Oficina do Marceneiro", null, { deco: 1 }),
+];
+function INTR(title, o) { return Object.assign({ title, wall: "#5c3a1f", floor: "#8a5a34", round: true, rx: 295, ry: 190, rug: "#7a3b2a", npcs: [], props: [], furn: [] }, o); }
+const NPCI = (nome, main, dark, collar, lines, ex) => inpc(Object.assign({ nome, main, dark, collar, lines }, ex || {}));
+Object.assign(INT, {
+  curandeira: INTR("Casa da Curandeira", { rug: "#4a8a5a", npcs: [NPCI("Curandeira Tribal", "#a8c08a", "#4a7a4a", "#4a8a5a", ["Respire fundo. Folha de hortelã, mel e paciência resolvem quase tudo.", "Ouvi dizer que no Cemitério há uma flor que cura saudade. Não é verdade, mas vale a caminhada.", "Aquela mina velha deixa muita gente com tosse. Use o lenço!"], { x: 400, y: 260, item: "Chapéu de Palha de Pescador" })], props: [mkProp({ id: "cu1", type: "urn", x: 250, y: 320, w: 30, h: 40, chance: .5 }), mkProp({ id: "cu2", type: "crate", x: 520, y: 330, w: 36, h: 32 })], furn: [{ type: "shelf", x: 300, y: 130 }, { type: "shelf", x: 450, y: 130 }, { type: "basket", x: 250, y: 250, w: 34, h: 24 }, { type: "firepit", x: 400, y: 360, w: 36 }, { type: "pelt", x: 470, y: 300 }] }),
+  padaria: INTR("Padaria Pão-de-Osso", { rug: "#c9a24a", npcs: [NPCI("Padeira Pão-de-Osso", "#e0c9a0", "#9a7a4a", "#c9455a", ["Pão de osso é o segredo da Vila: crocante por fora, nostálgico por dentro.", "Sua avó levava três pães por dia e devolvia dois. Dizia que o terceiro era 'para o Sinal'.", "Quando os filhotes passam correndo, o balcão inteiro treme!"], { x: 400, y: 250, scale: 3 })], props: [mkProp({ id: "pd1", type: "crate", x: 230, y: 320, w: 36, h: 32, chance: .4 }), mkProp({ id: "pd2", type: "urn", x: 540, y: 320, w: 30, h: 40, chance: .4 })], furn: [{ type: "firepit", x: 280, y: 190, w: 44 }, { type: "basket", x: 340, y: 340, w: 34, h: 24 }, { type: "basket", x: 470, y: 340, w: 34, h: 24 }, { type: "shelf", x: 480, y: 120 }, { type: "drum", x: 560, y: 230, w: 22, h: 28 }] }),
+  cacador: INTR("Cabana do Caçador", { rug: "#6a5a3a", npcs: [NPCI("Caçador Faro-Fino", "#8a6a4a", "#4a3323", "#4a6a3a", ["Caço só o necessário. A floresta cobra caro de quem exagera.", "Já ouvi um uivo vindo do céu. Fiquei três noites sem dormir.", "Rastro de bicho grande perto da Escavação... evite o fim da tarde."], { x: 410, y: 260, item: "Coleira Tática de Caça" })], props: [mkProp({ id: "ca1", type: "crate", x: 240, y: 320, w: 36, h: 32, chance: .4 })], furn: [{ type: "pelt", x: 300, y: 250 }, { type: "pelt", x: 500, y: 250 }, { type: "bonepile", x: 500, y: 350 }, { type: "drum", x: 280, y: 160, w: 24, h: 30 }, { type: "shelf", x: 420, y: 120 }] }),
+  tecelao: INTR("Casa da Tecelã", { rug: "#8a5a9a", npcs: [NPCI("Tecelã Fio-Longo", "#c9a0c0", "#7a4a7a", "#8a5ac9", ["Cada manta que tecem aqui leva um pedacinho do dia de quem a fez.", "Os gatos de Andrômeda tecem com fios de luz, dizem. Eu só tenho lã.", "Se algum dia achar fios estranhos no espaço, traga-os. Estou curiosa."], { x: 400, y: 255 })], props: [mkProp({ id: "te1", type: "urn", x: 250, y: 320, w: 30, h: 40, chance: .4 })], furn: [{ type: "basket", x: 320, y: 340, w: 34, h: 24 }, { type: "basket", x: 470, y: 340, w: 34, h: 24 }, { type: "pelt", x: 400, y: 330 }, { type: "bed", x: 520, y: 220 }, { type: "shelf", x: 300, y: 130 }] }),
+  escola: INTR("Escola da Vila", { rx: 330, ry: 210, rug: "#c9a24a", npcs: [NPCI("Mestra Latido-Claro", "#d9c9a0", "#8a7a4a", "#3fa6d6", ["Hoje a lição é: por que o Sol de Osso pisca? Respostas criativas valem ponto.", "Há dois tipos de aluno: os que perguntam e os que perguntam depois. Prefiro os primeiros.", "Estudar o Sinal virou matéria opcional. Está sempre lotada."], { x: 400, y: 200, scale: 3 }), NPCI("Aluno Ossinho", "#c9a06a", "#8a5a34", "#e05a4e", ["Eu vou ser piloto de foguete! Ou padeiro. Ainda decidindo.", "Você já viu o céu de perto? Conta tudo!"], { x: 270, y: 330, scale: 2.2 }), NPCI("Aluna Mancha", "#e0d0c0", "#7a6a5a", "#c9455a", ["A professora disse que gatos e cães têm a mesma estrela de origem. Os gatos discordam."], { x: 530, y: 330, scale: 2.2 })], props: [mkProp({ id: "es1", type: "crate", x: 180, y: 330, w: 36, h: 32, chance: .3 }), mkProp({ id: "es2", type: "urn", x: 620, y: 330, w: 30, h: 40, chance: .3 })], furn: [{ type: "shelf", x: 250, y: 130 }, { type: "shelf", x: 400, y: 120 }, { type: "shelf", x: 550, y: 130 }, { type: "drum", x: 330, y: 250, w: 24, h: 30 }, { type: "drum", x: 470, y: 250, w: 24, h: 30 }, { type: "pelt", x: 400, y: 360 }] }),
+  pescador: INTR("Cabana do Pescador", { rug: "#3a7a9a", npcs: [NPCI("Pescador Rabo-Molhado", "#9ab0c0", "#5a7a90", "#3fa6d6", ["Peixe-Luz só aparece na chuva. Nunca me pergunte por quê.", "A lagoa é boa para iniciantes. O mar, só para quem sabe mergulhar.", "Rio acima, perto da ponte de pedra, pesca-se bem ao amanhecer."], { x: 400, y: 260, item: "Laço Vermelho Gigante" })], props: [mkProp({ id: "pe1", type: "crate", x: 240, y: 320, w: 36, h: 32, chance: .4 })], furn: [{ type: "basket", x: 320, y: 330, w: 34, h: 24 }, { type: "bonepile", x: 500, y: 340 }, { type: "pelt", x: 400, y: 340 }, { type: "drum", x: 520, y: 220, w: 22, h: 28 }] }),
+  idosos: INTR("Casa dos Idosos", { rug: "#8a6a5a", npcs: [NPCI("Vô Cansado", "#b8b0a0", "#7a7466", "#8a5a34", ["No meu tempo o Sol de Osso era maior. Ou eu era menor.", "Sua avó me deu uma carta pra entregar 'quando o céu voltasse a ser azul'. Estou esperando."], { x: 320, y: 260 }), NPCI("Vó Resmunga", "#d0c0b0", "#8a7a6a", "#c9455a", ["Coma direito, filhote! Você está magro de tanto voar.", "Aqueles dois cachorrinhos pretos e bege deviam ser proibidos de ser tão fofos."], { x: 490, y: 260 })], props: [mkProp({ id: "id1", type: "urn", x: 230, y: 330, w: 30, h: 40, chance: .4 })], furn: [{ type: "bed", x: 250, y: 220 }, { type: "bed", x: 550, y: 220 }, { type: "firepit", x: 400, y: 350, w: 36 }, { type: "basket", x: 400, y: 250, w: 34, h: 24 }, { type: "shelf", x: 400, y: 120 }] }),
+  cartografo: INTR("Casa do Cartógrafo", { rug: "#4a6a9a", npcs: [NPCI("Cartógrafo Bússola", "#c9b88a", "#7a6a3a", "#3fa6d6", ["Meu mapa da ilha tem mais bordas que o mapa da sua avó. E menos mentiras.", "O Vale Lareira não aparece em mapa algum. Sua avó pagou caro para isso.", "Cartografar o espaço é fácil: tudo é longe e escuro. O difícil é desenhar saudade."], { x: 400, y: 250 })], props: [mkProp({ id: "cg1", type: "crate", x: 240, y: 320, w: 36, h: 32, chance: .5 })], furn: [{ type: "shelf", x: 300, y: 120 }, { type: "shelf", x: 450, y: 120 }, { type: "drum", x: 520, y: 250, w: 24, h: 30 }, { type: "pelt", x: 400, y: 340 }] }),
+  comunal: INTR("Casa Comunal", { rx: 345, ry: 222, rug: "#c9455a", npcs: [NPCI("Chefe Voz-Grave", "#a8886a", "#5a4a34", "#e8b84b", ["A Vila é de todos: quem planta, quem pesca, quem sonha olhando para cima.", "O Pajé guarda as histórias; eu guardo as contas. Ambos importam.", "Se precisar de ajuda para organizar uma festa, a Vila agradece o ouro e o entusiasmo."], { x: 400, y: 200, scale: 3.1 }), NPCI("Escriba Pena-Rápida", "#d9d0b0", "#8a8a5a", "#3a2618", ["Anoto tudo: colheitas, nascimentos, uivos suspeitos.", "Seu nome já está no livro da Vila. Duas vezes. Uma com erro de ortografia."], { x: 270, y: 300 })], props: [mkProp({ id: "co1", type: "crate", x: 180, y: 330, w: 36, h: 32, chance: .3 }), mkProp({ id: "co2", type: "statue", x: 590, y: 240, w: 42, h: 54, chance: .5 })], furn: [{ type: "firepit", x: 400, y: 340, w: 46 }, { type: "pelt", x: 330, y: 280 }, { type: "pelt", x: 470, y: 280 }, { type: "shelf", x: 280, y: 120 }, { type: "shelf", x: 520, y: 120 }, { type: "drum", x: 580, y: 330, w: 24, h: 30 }] }),
+  taverna: INTR("Taverna Osso Quente", { rx: 330, ry: 210, rug: "#a8402a", npcs: [NPCI("Taverneiro Caneca", "#b08a5a", "#6a4a2a", "#c9455a", ["Hoje temos ensopado de osso, osso ensopado e... surpresa de osso.", "Bardo Cordão toca de graça. A conta vem no fim, e é só pelo ensopado.", "Viajantes contam as melhores histórias. Os mentirosos, as melhores ainda."], { x: 400, y: 220, scale: 3 }), NPCI("Viajante Poeira", "#c9a06a", "#8a5a34", "#3fa6d6", ["Vim de Rubra. O Titânio de lá é bom, mas a areia entra em tudo, até na sopa.", "Dizem que há uma ilha escondida onde a avó de alguém plantava girassóis."], { x: 540, y: 320 })], props: [mkProp({ id: "ta1", type: "crate", x: 200, y: 330, w: 36, h: 32, chance: .4 }), mkProp({ id: "ta2", type: "urn", x: 600, y: 240, w: 30, h: 40, chance: .4 })], furn: [{ type: "firepit", x: 280, y: 330, w: 40 }, { type: "drum", x: 360, y: 330, w: 24, h: 30 }, { type: "drum", x: 450, y: 330, w: 24, h: 30 }, { type: "shelf", x: 320, y: 120 }, { type: "shelf", x: 480, y: 120 }, { type: "pelt", x: 540, y: 250 }] }),
+  barqueiro: INTR("Casa do Barqueiro", { rug: "#3a6a8a", npcs: [NPCI("Barqueiro Remo-Forte", "#8aa0b0", "#4a6a7a", "#3fa6d6", ["Mar calmo é mar mentiroso. Respeite as correntes.", "Se for até o Cosmódromo, leve combustível extra. As ilhas do sul não perdoam.", "Rio, lagoa, mar... tudo é água, mas só o mar tem opinião."], { x: 400, y: 255 })], props: [mkProp({ id: "ba1", type: "crate", x: 240, y: 320, w: 36, h: 32, chance: .4 })], furn: [{ type: "basket", x: 320, y: 340, w: 34, h: 24 }, { type: "bonepile", x: 500, y: 340 }, { type: "drum", x: 520, y: 220, w: 22, h: 28 }, { type: "pelt", x: 400, y: 340 }] }),
+});
+Object.assign(NEWOBS, {
+  cabana(g, o, sx, sy) {
+    const w = o.w, h = o.h, v = (o.v | 0) % 5, P = [["#b8893a", "#8a6226", "#c9455a"], ["#a8402a", "#7a2a1a", "#e8b84b"], ["#4a7a8a", "#2f5a6a", "#e8d8a0"], ["#8a5a9a", "#5a3a6a", "#e8b84b"], ["#5a8a3a", "#3a6a2a", "#c9455a"]][v], big = o.big, t = Date.now() / 1000;
+    g.save(); g.fillStyle = "rgba(0,0,0,.22)"; g.beginPath(); g.ellipse(sx + w / 2, sy + h - 2, w * .55, 10, 0, 0, 6.283); g.fill();
+    const bt = sy + h * .42; g.fillStyle = "#6c6358"; g.fillRect(sx + 4, sy + h - 18, w - 8, 14); g.fillStyle = "#7d7468"; for (let i = 0; i < w - 12; i += 14) g.fillRect(sx + 6 + i, sy + h - 18, 12, 6);
+    g.fillStyle = "#8a5a34"; g.fillRect(sx + 6, bt, w - 12, h - 18 - (bt - sy)); g.fillStyle = "#a06a3a"; for (let y = bt; y < sy + h - 18; y += 8) g.fillRect(sx + 6, y, w - 12, 3); g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(sx + w / 2, bt, (w - 12) / 2, sy + h - 18 - bt);
+    g.fillStyle = P[1]; g.beginPath(); g.moveTo(sx - 6, bt + 6); g.lineTo(sx + w / 2, sy - 2); g.lineTo(sx + w + 6, bt + 6); g.closePath(); g.fill(); g.fillStyle = P[0]; g.beginPath(); g.moveTo(sx - 6, bt + 6); g.lineTo(sx + w / 2, sy - 2); g.lineTo(sx + w / 2 - 10, bt + 6); g.closePath(); g.fill();
+    g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 1; for (let i = 1; i < 6; i++) { g.beginPath(); g.moveTo(sx + w / 2, sy); g.lineTo(sx - 6 + i * (w + 12) / 6, bt + 6); g.stroke(); }
+    g.fillStyle = P[2]; g.fillRect(sx + w / 2 - 2, sy - 12, 2, 14); g.beginPath(); g.moveTo(sx + w / 2, sy - 12); g.lineTo(sx + w / 2 + 14, sy - 8 + Math.sin(t * 3) * 1.5); g.lineTo(sx + w / 2, sy - 3); g.closePath(); g.fill();
+    g.fillStyle = "#3a2410"; g.fillRect(sx + w / 2 - 12, sy + h - 42, 24, 28); g.fillStyle = "#6a4020"; g.fillRect(sx + w / 2 - 10, sy + h - 40, 20, 26); g.fillStyle = "#e8b84b"; g.fillRect(sx + w / 2 + 5, sy + h - 28, 3, 3);
+    g.fillStyle = "#6fb0d8"; g.fillRect(sx + 16, bt + 12, 16, 14); g.fillRect(sx + w - 32, bt + 12, 16, 14); g.fillStyle = "#4a2f18"; g.fillRect(sx + 23, bt + 12, 2, 14); g.fillRect(sx + w - 25, bt + 12, 2, 14);
+    if (big) { g.fillStyle = "#4a2f18"; g.fillRect(sx + w - 30, sy + 8, 10, 22); for (let i = 0; i < 3; i++) { g.fillStyle = "rgba(220,220,220," + (.35 - i * .1) + ")"; g.beginPath(); g.arc(sx + w - 25 + Math.sin(t + i) * 4, sy + 2 - i * 9, 5 + i * 2, 0, 6.283); g.fill(); } }
+    g.fillStyle = "#fff"; g.font = "bold 8px sans-serif"; g.textAlign = "center"; g.fillStyle = "rgba(20,12,8,.7)"; const tw = g.measureText(o.title || "").width + 8; if (o.title && !o.deco) { g.fillRect(sx + w / 2 - tw / 2, sy + h + 4, tw, 12); g.fillStyle = "#f4ead7"; g.fillText(o.title, sx + w / 2, sy + h + 13); }
+    g.restore();
+  },
+  totem(g, o, sx, sy) { g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h - 2, o.w * .7, 6, 0, 0, 6.283); g.fill(); const cs = ["#8a5a34", "#c9455a", "#e8b84b", "#3fa6d6"]; for (let i = 0; i < 4; i++) { g.fillStyle = cs[i]; g.fillRect(sx + 4, sy + 6 + i * ((o.h - 8) / 4), o.w - 8, (o.h - 8) / 4 - 1); g.fillStyle = "#1a120c"; g.fillRect(sx + 8, sy + 11 + i * ((o.h - 8) / 4), 4, 3); g.fillRect(sx + o.w - 12, sy + 11 + i * ((o.h - 8) / 4), 4, 3); } g.fillStyle = "#e8b84b"; g.beginPath(); g.moveTo(sx, sy + 8); g.lineTo(sx + o.w / 2, sy - 6); g.lineTo(sx + o.w, sy + 8); g.closePath(); g.fill(); },
+  barrel(g, o, sx, sy) { g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + o.h - 1, o.w * .5, 4, 0, 0, 6.283); g.fill(); g.fillStyle = "#7a4a26"; g.fillRect(sx + 2, sy + 4, o.w - 4, o.h - 6); g.fillStyle = "#5a3418"; g.fillRect(sx + 2, sy + 10, o.w - 4, 3); g.fillRect(sx + 2, sy + o.h - 12, o.w - 4, 3); g.fillStyle = "#9a6a3a"; g.beginPath(); g.ellipse(sx + o.w / 2, sy + 4, o.w / 2 - 2, 4, 0, 0, 6.283); g.fill(); },
+  reeds(g, o, sx, sy) { const t = Date.now() / 1000; g.strokeStyle = "#5a8a3a"; g.lineWidth = 2; for (let i = 0; i < 6; i++) { const x = sx + 3 + i * 3, hh = 14 + (i * 7) % 10; g.beginPath(); g.moveTo(x, sy + o.h); g.quadraticCurveTo(x + Math.sin(t * 1.5 + i) * 2, sy + o.h - hh / 2, x + Math.sin(t * 1.5 + i) * 3, sy + o.h - hh); g.stroke(); if (i % 2 === 0) { g.fillStyle = "#6a4a2a"; g.fillRect(x + Math.sin(t * 1.5 + i) * 3 - 1.5, sy + o.h - hh - 4, 3, 6); } } },
+  dockflat(g, o, sx, sy) { g.fillStyle = "#6a4a2a"; g.fillRect(sx, sy, o.w, o.h); for (let x = 0; x < o.w; x += 9) { g.fillStyle = x % 18 ? "#8a6238" : "#7a5430"; g.fillRect(sx + x, sy, 8, o.h); } g.fillStyle = "#3a2410"; for (let y = 4; y < o.h; y += 22) { g.fillRect(sx - 2, sy + y - 2, 5, 5); g.fillRect(sx + o.w - 3, sy + y - 2, 5, 5); } },
+  mineboard(g, o, sx, sy) { g.fillStyle = "#4a2f18"; g.fillRect(sx + 4, sy + 14, 5, o.h - 14); g.fillRect(sx + o.w - 9, sy + 14, 5, o.h - 14); g.fillStyle = "#8a5a34"; g.fillRect(sx, sy, o.w, 24); g.fillStyle = "#f4ead7"; g.font = "bold 8px sans-serif"; g.textAlign = "center"; g.fillText("MINA", sx + o.w / 2, sy + 11); g.fillText("PEDREGULHO", sx + o.w / 2, sy + 20); },
+});
+var VILLAGE_ROADS = [
+  [[430, 245], [450, 340], [520, 470], [700, 548], [962, 560], [1200, 585], [1530, 575], [1650, 575]],
+  [[470, 300], [640, 335], [800, 315], [1012, 300], [1180, 330], [1260, 410]],
+  [[605, 290], [640, 335]], [[760, 220], [785, 320]], [[915, 270], [905, 315]],
+  [[700, 548], [695, 700], [740, 860], [920, 905], [1090, 895], [1250, 885], [1479, 850]],
+  [[740, 860], [620, 960], [500, 1030]],
+  [[1650, 575], [1655, 420], [1645, 290]], [[1870, 578], [1950, 440]],
+  [[1250, 885], [1280, 880]], [[1830, 640], [1990, 790]], [[1800, 700], [1810, 850]],
+  [[1100, 330], [1150, 232]], [[615, 515], [620, 500]], [[395, 490], [450, 480]],
+];
+function buildVillage2(Wd) {
+  const O = (x, y, w, h, type, ex) => { const o = Object.assign({ x, y, w, h, type, vil: 1 }, ex || {}); Wd.obs.push(o); return o; };
+  // peças originais do mapa ficam onde estão (praça em ~1650,560); recria o que saiu da fazenda
+  O(1200 - 400, 960, 70, 70, "sign", { nosolid: true, label: "← Vila" }); O(1560, 1010, 70, 50, "sign", { nosolid: true, label: "↑ VILA TRIBAL" });
+  [[1400, 720, "FRUTAS"], [1510, 720, "PEIXES"], [1620, 720, "ERVAS"], [1730, 715, "PÃES"]].forEach((a) => O(a[0], a[1], 96, 62, "stall", { stallLabel: a[2] }));
+  // casas
+  HOUSES.forEach((h) => { const ex = { v: h.v, title: h.title, big: h.ex && h.ex.big, deco: h.ex && h.ex.deco }; if (!(h.ex && h.ex.deco)) { ex.door = { x: DOORX(h.x, h.w), y: h.y + h.h - 2, w: 32, h: 16 }; ex.interior = h.id; } O(h.x, h.y, h.w, h.h, "cabana", ex); });
+  // arco da Lareira + escadaria
+  O(VILLAGE_ARCH.x, VILLAGE_ARCH.y, VILLAGE_ARCH.w, VILLAGE_ARCH.h, "valearch", { nosolid: true, to: "vale" }); O(VILLAGE_ARCH.x + 10, VILLAGE_ARCH.y + 100, 100, 100, "steps", { nosolid: true }); O(VILLAGE_ARCH.x - 20, VILLAGE_ARCH.y + 90, 36, 36, "sign", { nosolid: true, label: "Trilha da Colina Lareira" });
+  // pontes
+  BRIDGES.filter((b) => b.x < 3000 || b.id === "ponte_vale").forEach((b) => O(b.x, b.y, b.w, b.h, "bridge", { nosolid: true, kind: b.kind }));
+  // doca da lagoa e pesca
+  O(500, 780, 60, 40, "dockflat", { nosolid: true }); O(1790, 920, 60, 36, "dockflat", { nosolid: true });
+  Wd.fish.push({ x: 560, y: 830, kind: "coast" }, { x: 1850, y: 985, kind: "coast" }, { x: 975, y: 420, kind: "coast" }, { x: 1105, y: 960, kind: "coast" });
+  // totens, barris, canteiros
+  [[1480, 440], [1830, 470], [1220, 560], [2100, 640], [610, 580], [450, 130]].forEach((a, i) => O(a[0], a[1], 26, 62, "totem", {}));
+  [[1385, 780], [1780, 790], [1100, 150], [2000, 870], [1700, 900], [780, 620], [330, 640]].forEach((a) => O(a[0], a[1], 24, 28, "barrel", {}));
+  [[1550, 640], [1760, 560], [1500, 450], [640, 620], [380, 590], [1180, 470], [1300, 770], [880, 400]].forEach((a, i) => O(a[0], a[1], 64, 34, "flowerbed", { nosolid: true, c: i }));
+  O(1560, 560, 60, 36, "bench", { nosolid: true }); O(1710, 540, 60, 36, "bench", { nosolid: true }); O(1630, 440, 50, 36, "bench", { nosolid: true });
+  // estradas e luminárias
+  VILLAGE_ROADS.forEach((r) => Wd.roads.push(r.map((p) => p.slice())));
+  VILLAGE_ROADS.slice(0, 8).forEach((r) => { let acc = 0; for (let j = 1; j < r.length; j++) { const L = Math.hypot(r[j][0] - r[j - 1][0], r[j][1] - r[j - 1][1]); for (let d = 90 - acc; d < L; d += 210) { const t = d / L, x = r[j - 1][0] + (r[j][0] - r[j - 1][0]) * t, y = r[j - 1][1] + (r[j][1] - r[j - 1][1]) * t; if (!riverAt(x + 26, y) && !onBridge(x + 26, y) && !Wd.obs.some((q) => q.type === "lamp" && Math.hypot(q.x - (x + 24), q.y - (y - 38)) < 130)) O(x + 24, y - 38, 16, 44, "lamp", { nosolid: true }); } acc = (acc + L) % 210; } });
+  // juncos nas margens
+  RIVERS[0].pts.forEach((p, i) => { if (!i) return; const a = RIVERS[0].pts[i - 1], n = 3; for (let k = 0; k < n; k++) { const t = (k + .5) / n, x = a[0] + (p[0] - a[0]) * t, y = a[1] + (p[1] - a[1]) * t, side = (i + k) % 2 ? 1 : -1; const bx = x + side * 40, by = y; if (!onBridge(bx, by) && !riverAt(bx, by)) O(bx - 9, by - 8, 18, 22, "reeds", { nosolid: true }); } });
+  O(380, 900, 170, 118, "mineentry", { nosolid: false }); W_TRIG_ORE(Wd); O(600, 1060, 60, 40, "mineboard", { nosolid: true });
+  // moradores ao ar livre
+  Wd.npcs.push(
+    NPC_BASE("marceneiro", "Marceneiro Cepo", 1800, 975, "#9a6a3a", "#5a3a1a", "#e8b84b", ["Móveis, baús e ampliações! Sua casa merece conforto.", "Uma cama boa vale mais que mil petiscos."], { hat: "#d9c48a", special: "marceneiro", lines2: ["Faço a madeira cantar. E o preço, também."] }),
+    NPC_BASE("anciao", "Anciã Contadora", 1560, 600, "#bfb8a8", "#7a7466", "#8a5ac9", ["Sente-se, pequeno. Há histórias mais velhas que o Osso.", "Cada estrela é um latido do Grande Cão."], { hat: "#8a5ac9", special: "lore", lines2: ["Você carrega o olhar da sua avó."] }),
+    NPC_BASE("lavadeira", "Lavadeira Rio-Claro", 930, 650, "#c9a0b0", "#8a5a6a", "#3fa6d6", ["O Rio Mansinho nasce lá no norte e morre na lagoa do sul. Pelo caminho, escuta tudo.", "Cuidado nas pontes depois da chuva. As tábuas escorregam."], { r: 30 }),
+    NPC_BASE("guarda_ponte", "Guarda da Ponte", 1010, 490, "#7a8a9a", "#3a4a5a", "#c9455a", ["Ponte de Pedra: passagem livre para quem vem em paz.", "Já vi gente cair no rio. Ninguém tentou duas vezes."], { r: 22 }),
+    NPC_BASE("fruteira", "Vendedora de Frutas", 1440, 790, "#e0a060", "#a06a30", "#3fa6d6", ["Maçãs do Vale Lareira! Docinhas como um dia de preguiça.", "Se você tem pomar, venda por aqui. Pago bem as vermelhas."], { r: 24 }),
+    NPC_BASE("bardo", "Bardo Cordão", 1700, 660, "#a8a0d0", "#5a508a", "#e8b84b", ["♪ Era uma vez um cão que latiu para o céu… e o céu respondeu. ♪", "Toco a Balada do Osso de graça. Os bis, só em petiscos."], { r: 38, lines2: ["♪ E a fazendeira do vale subiu aos astros... ♪"] }),
+    NPC_BASE("crianca1", "Filhote Bolota", 1540, 520, "#d0b080", "#8a6a3a", "#e05a4e", ["Corre! O último é um gato molhado!", "Você tem um foguete de verdade? Posso tocar?"], { scale: 2.1, r: 70 }),
+    NPC_BASE("crianca2", "Filhote Pipoca", 1580, 540, "#e0d0b0", "#8a7a5a", "#3fa6d6", ["Eu vi um peixe saltar na lagoa e piscar para mim!", "Meu pai diz que o céu é um quintal grande demais."], { scale: 2.1, r: 70 }),
+    NPC_BASE("guarda_mina", "Chefe de Mina Pedra-Dura", 620, 1030, "#8a7a6a", "#4a3a2a", "#e8b84b", ["A Mina do Pedregulho está aberta a quem tiver coragem e um bom par de patas.", "Aqui embaixo não tem monstro: só pedra, minério e o eco do seu próprio latido."], { special: "chefe_mina", hat: "#e8b84b", r: 24 }),
+  );
+}
+
+function W_TRIG_ORE(Wd) { Wd.trig.push({ x: 430, y: 1020, w: 70, h: 30, kind: "dungeon", id: "ore" }); }
+
+// ============================================================
+// pv28: Mina do Pedregulho — mineração de verdade: sem monstros, minérios por profundidade, elevador, picareta
+// ============================================================
+var ORE_CH = "KOISGHJYg";
+const ORE = {
+  K: { n: "Pedra", res: "pedra", hp: 2, tier: 0, xp: 1, c: "#8e8e98", c2: "#6c6c78" },
+  O: { n: "Cobre", res: "cobre", hp: 3, tier: 0, xp: 3, c: "#d9803a", c2: "#9a5420" },
+  I: { n: "Ferro", res: "ferro", hp: 4, tier: 1, xp: 5, c: "#b8c0cc", c2: "#7a8490" },
+  S: { n: "Prata", res: "prata", hp: 5, tier: 2, xp: 8, c: "#e6edf5", c2: "#9aa6b4" },
+  G: { n: "Ouro", res: "pepita", hp: 6, tier: 3, xp: 12, c: "#ffd23f", c2: "#b88a10" },
+  H: { n: "Ametista", res: "ametista", hp: 6, tier: 2, xp: 10, c: "#b87aff", c2: "#6a3aa8" },
+  J: { n: "Titânio", res: "titanio", hp: 8, tier: 4, xp: 16, c: "#dce6f4", c2: "#7aa0d0" },
+  Y: { n: "Diamante", res: "diamante", hp: 10, tier: 5, xp: 30, c: "#9ff0ff", c2: "#3ab0d0" },
+  g: { n: "Geodo", res: "geodo", hp: 3, tier: 0, xp: 6, c: "#c9b8a0", c2: "#7a6a58" },
+};
+const ORE_W = [["K", 1, 1, 99, 10], ["O", 1, 8, 24, 8], ["I", 4, 14, 34, 8], ["S", 10, 24, 40, 7], ["H", 8, 20, 40, 3], ["G", 15, 28, 40, 5], ["J", 22, 34, 40, 4], ["Y", 28, 40, 40, 1.4], ["g", 3, 10, 40, 2]];
+const PICKS = [
+  { nm: "Picareta de Pedra", pow: 1 }, { nm: "Picareta de Cobre", pow: 1.5, cost: { g: 200, cobre: 15 } }, { nm: "Picareta de Ferro", pow: 2, cost: { g: 400, ferro: 20 } },
+  { nm: "Picareta de Prata", pow: 3, cost: { g: 800, prata: 15 } }, { nm: "Picareta de Ouro", pow: 4, cost: { g: 1500, pepita: 12 } }, { nm: "Picareta de Titânio", pow: 6, cost: { g: 3000, titanio: 12, diamante: 3 } },
+];
+const MINEPRICE = { pedra: 2, cobre: 7, ferro: 11, prata: 20, pepita: 38, ametista: 52, titanio: 46, diamante: 170, cristal_roxo: 30 };
+Object.assign(RES, { pedra: { n: "Pedra", ic: "🪨", c: "#8e8e98" }, cobre: { n: "Cobre", ic: "🟠", c: "#d9803a" }, prata: { n: "Prata", ic: "⚪", c: "#e6edf5" }, pepita: { n: "Pepita de Ouro", ic: "🟡", c: "#ffd23f" }, ametista: { n: "Ametista", ic: "💜", c: "#b87aff" }, diamante: { n: "Diamante", ic: "💎", c: "#9ff0ff" } });
+Object.assign(DTHEME, {
+  ore0: { floor: "#3a2c1e", alt: "#42321f", wall: "#1a120a", top: "#2c2014", name: "Mina do Pedregulho — Raízes e Argila" },
+  ore1: { floor: "#33353c", alt: "#3a3c44", wall: "#14151a", top: "#24262e", name: "Mina do Pedregulho — Veios de Ferro" },
+  ore2: { floor: "#2a3440", alt: "#303c4a", wall: "#10161c", top: "#1e2a36", name: "Mina do Pedregulho — Galerias Azuis" },
+  ore3: { floor: "#33283f", alt: "#3b2e48", wall: "#150f1c", top: "#251c30", name: "Mina do Pedregulho — Cavernas de Ametista" },
+  ore4: { floor: "#3a2424", alt: "#442a2a", wall: "#1a0c0c", top: "#2c1818", name: "Mina do Pedregulho — Fornalha Profunda" },
+  ore5: { floor: "#1e3238", alt: "#243c44", wall: "#0a1418", top: "#142830", name: "Mina do Pedregulho — O Fundo do Mundo" },
+});
+function MN() { if (!X.mine) X.mine = { lv: 1, xp: 0, pick: 0, best: 0, elev: [1], mined: 0 }; if (!X.mine.elev) X.mine.elev = [1]; return X.mine; }
+let oreState = null, OFX = [];
+function oreZone(n) { return n <= 5 ? 0 : n <= 10 ? 1 : n <= 15 ? 2 : n <= 20 ? 3 : n <= 30 ? 4 : 5; }
+function oreWeights(n) { return ORE_W.map((r) => { if (n < r[1] || n > r[3]) return [r[0], 0]; const k = n < r[2] ? (n - r[1] + 1) / (r[2] - r[1] + 1) : 1; return [r[0], r[4] * k]; }).filter((a) => a[1] > 0); }
+function pickOre(n) { const ws = oreWeights(n), tot = ws.reduce((a, b) => a + b[1], 0); let r = rnd() * tot; for (const w of ws) { r -= w[1]; if (r <= 0) return w[0]; } return "K"; }
+function genOreFloor(n) {
+  seedRnd(((X.day || 1) * 1315423911 + n * 2654435761 + (X.wseed | 0)) >>> 0);
+  for (let att = 0; att < 20; att++) {
+    const w = 58, h = 40, m = gridMaker(w, h); let g = []; for (let y = 0; y < h; y++) { g.push([]); for (let x = 0; x < w; x++) g[y].push(x < 2 || y < 2 || x >= w - 2 || y >= h - 2 ? 1 : (rnd() < .53 ? 1 : 0)); }
+    for (let it = 0; it < 5; it++) { const ng = g.map((r) => r.slice()); for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { let c = 0; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) c += g[y + j][x + i]; ng[y][x] = c >= 5 ? 1 : 0; } g = ng; }
+    // maior região
+    const seen = Array.from({ length: h }, () => Array(w).fill(0)); let best = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (!g[y][x] && !seen[y][x]) { const st = [[x, y]], reg = []; seen[y][x] = 1; while (st.length) { const [cx, cy] = st.pop(); reg.push([cx, cy]); [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach((d) => { const nx = cx + d[0], ny = cy + d[1]; if (nx >= 0 && ny >= 0 && nx < w && ny < h && !g[ny][nx] && !seen[ny][nx]) { seen[ny][nx] = 1; st.push([nx, ny]); } }); } if (reg.length > best.length) best = reg; }
+    if (best.length < 420) continue;
+    const cells = {}; best.forEach((c) => { cells[c[0] + "," + c[1]] = 1; });
+    best.sort((a, b) => a[0] - b[0] || a[1] - b[1]); const st0 = best[Math.floor(best.length * .03)], far = best.slice().sort((a, b) => Math.hypot(b[0] - st0[0], b[1] - st0[1]) - Math.hypot(a[0] - st0[0], a[1] - st0[1]))[0];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) m.set(x, y, cells[x + "," + y] ? "." : "#");
+    const free = (x, y) => cells[x + "," + y] && m.g[y][x] === "."; const nearS = (x, y) => Math.hypot(x - st0[0], y - st0[1]) < 4 || Math.hypot(x - far[0], y - far[1]) < 3;
+    // veios
+    const veins = 12 + Math.floor(n / 6); for (let v = 0; v < veins; v++) { const c = best[Math.floor(rnd() * best.length)], t = pickOre(n); let x = c[0], y = c[1]; const len = t === "K" ? 7 : 3 + Math.floor(rnd() * 5); for (let k = 0; k < len; k++) { if (free(x, y) && !nearS(x, y)) m.set(x, y, t); const d = [[1, 0], [-1, 0], [0, 1], [0, -1]][Math.floor(rnd() * 4)]; x += d[0]; y += d[1]; } }
+    for (let k = 0; k < 40; k++) { const c = best[Math.floor(rnd() * best.length)]; if (free(c[0], c[1]) && !nearS(c[0], c[1])) m.set(c[0], c[1], rnd() < .75 ? "K" : pickOre(n)); }
+    // escada, volta, elevador
+    const sx = st0[0], sy = st0[1]; m.set(sx, sy, "@");
+    const nb = [[-1, 0], [1, 0], [0, -1], [0, 1]].map((d) => [sx + d[0], sy + d[1]]).filter((c) => cells[c[0] + "," + c[1]]); const up = nb[0] || [sx + 1, sy]; m.set(up[0], up[1], n === 1 ? "E" : "<"); 
+    m.set(far[0], far[1], ">");
+    if (n % 5 === 0) { const q = nb[1] || nb[0]; if (q && m.g[q[1]][q[0]] === ".") m.set(q[0], q[1], "Q"); else m.set(sx, sy + 1, "Q"); }
+    let ch = n % 3 === 0 ? 2 : 1; for (let k = 0; k < 40 && ch > 0; k++) { const c = best[Math.floor(rnd() * best.length)]; if (free(c[0], c[1]) && !nearS(c[0], c[1])) { m.set(c[0], c[1], "c"); ch--; } }
+    return m.rows();
+  }
+  const m = gridMaker(30, 20); m.R(3, 3, 24, 14); m.set(4, 10, "@"); m.set(3, 10, n === 1 ? "E" : "<"); m.set(25, 10, ">"); return m.rows();
+}
+function enterOre(trg, fl) {
+  const M = MN(); ret = { x: trg.x + trg.w / 2, y: trg.y - 30 }; const lv = fl || 1;
+  oreState = { level: lv, levels: {}, day: X.day }; loadOreLevel(lv, true); scene = "dungeon"; P.x = D.start.x; P.y = D.start.y; cat.x = P.x - 26; cat.y = P.y; effects = []; projectiles = []; hazards = []; decoy = null;
+  toast("⛏️ Mina do Pedregulho — nível " + lv + (M.best ? " (recorde: " + M.best + ")" : ""), 2800);
+}
+function loadOreLevel(lv, fresh) {
+  if (!oreState.levels[lv]) { const rows = genOreFloor(lv); const dd = buildDungeon(rows, "ore" + oreZone(lv), { tag: "ore", ore: lv, boss: "guardian" }); dd.ore = true; dd.id = "ore"; dd.hp = {}; dd.floor = lv; dd.enemies = []; oreState.levels[lv] = dd; }
+  D = oreState.levels[lv]; D.guard = 1; oreState.level = lv; const M = MN(); if (lv > M.best) { M.best = lv; if (lv % 5 === 0) { } }
+}
+function oreGo(delta) {
+  const lv = oreState.level + delta; if (lv < 1) return; loadOreLevel(lv); const M = MN();
+  if (delta > 0) { P.x = D.start.x; P.y = D.start.y; } else { let fx = null; for (let y = 0; y < D.h && !fx; y++) for (let x = 0; x < D.w; x++) if (D.g[y][x] === ">") { fx = { x: x * TS + 16, y: y * TS + 16 + 32 }; break; } const f = fx || D.start; P.x = f.x; P.y = f.y; }
+  cat.x = P.x - 26; cat.y = P.y; effects = []; toast("⛏️ Nível " + lv + (M.best === lv && delta > 0 ? " — novo recorde!" : ""), 2200); try { mineStoryCheck(lv); } catch (e) { }
+}
+function pickPow() { const M = MN(); return PICKS[M.pick].pow * (1 + .04 * (M.lv - 1)); }
+function oreXP(n) { const M = MN(); M.xp += n; const need = 40 + M.lv * 25; if (M.xp >= need) { M.xp -= need; M.lv++; toast("⭐ Habilidade de Mineração nível " + M.lv + "! Picareta mais forte e mais chance de minério extra.", 3600); } }
+function oreSwing() {
+  if (P.atkCd > 0) return true; P.atkCd = .34; const f = fv(P.face), M = MN();
+  effects.push({ t: "swing", x: P.x + f[0] * 22, y: P.y + f[1] * 22, life: .12, max: .12, c: "#e6edf5", r: 16 });
+  let tgt = null; for (const d of [26, 38, 16]) { const tx = Math.floor((P.x + f[0] * d) / TS), ty = Math.floor((P.y + f[1] * d) / TS), c = tileAt(tx, ty); if (ORE[c]) { tgt = [tx, ty, c]; break; } }
+  if (!tgt) { const cx = Math.floor(P.x / TS), cy = Math.floor(P.y / TS); for (let j = -1; j <= 1 && !tgt; j++) for (let i = -1; i <= 1; i++) { const c = tileAt(cx + i, cy + j); if (ORE[c] && Math.hypot((cx + i + .5) * TS - P.x, (cy + j + .5) * TS - P.y) < 44) { tgt = [cx + i, cy + j, c]; break; } } }
+  if (!tgt) return false;
+  const [tx, ty, c] = tgt, o = ORE[c], key = tx + "," + ty;
+  if (o.tier > M.pick) { toast("🚫 " + o.n + " exige " + PICKS[o.tier].nm + ". Melhore a picareta com o Chefe de Mina.", 2400); return true; }
+  if (D.hp[key] == null) D.hp[key] = o.hp; D.hp[key] -= pickPow(); orePart(tx, ty, o.c);
+  if (D.hp[key] > 0) return true;
+  D.g[ty][tx] = "."; delete D.hp[key]; let q = 1 + (rnd() < .06 * (M.lv - 1) + (petBuff("cake") ? .25 : 0) ? 1 : 0); if (c === "K") q = 1 + (rnd() < .3 ? 1 : 0);
+  M.mined++; oreXP(o.xp);
+  if (c === "g") { const gs = ["ametista", "ametista", "cobre", "prata", "pepita", "diamante"], r = gs[Math.floor(rnd() * (D.floor > 15 ? 6 : 4))]; radd(r, 1); toast("🪨 Geodo aberto! " + RES[r].ic + " " + RES[r].n, 2200); }
+  else { radd(o.res, q); toast(RES[o.res].ic + " +" + q + " " + RES[o.res].n, 1100); }
+  for (let i = 0; i < 8; i++) orePart(tx, ty, o.c); return true;
+}
+function orePart(tx, ty, col) { for (let i = 0; i < 3; i++) OFX.push({ x: tx * TS + 16, y: ty * TS + 16, vx: (Math.random() - .5) * 120, vy: -20 - Math.random() * 80, t: .5 + Math.random() * .3, c: col }); }
+function petBuff(k) { try { return typeof petActive === "function" && petActive(k); } catch (e) { return false; } }
+// ---------- hooks do motor ----------
+function tryAttack() { if (scene === "dungeon" && D && D.ore) { oreSwing(); return; } tryAttack0(); }
+function dungeonInteract() { if (D && D.ore) { if (oreSwing()) return; } dungeonInteract0(); }
+function updateDungeon(dt) {
+  updateDungeon0(dt); if (!(scene === "dungeon" && D && D.ore)) return;
+  if (input.attack && P.atkCd <= 0) oreSwing();
+  const tx = Math.floor(P.x / TS), ty = Math.floor(P.y / TS), c = tileAt(tx, ty);
+  if (D.guard <= 0) { if (c === ">") { oreGo(1); return; } if (c === "<") { oreGo(-1); return; } }
+  if (c === "Q") { const M = MN(); if (M.elev.indexOf(D.floor) < 0) { M.elev.push(D.floor); M.elev.sort((a, b) => a - b); toast("🛗 Elevador ativado no nível " + D.floor + "! O Chefe de Mina agora pode te levar direto até aqui.", 4200); } }
+  for (let i = OFX.length - 1; i >= 0; i--) { const q = OFX[i]; q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 260 * dt; if (q.t <= 0) OFX.splice(i, 1); }
+  const f = fv(P.face), tc = tileAt(Math.floor((P.x + f[0] * 26) / TS), Math.floor((P.y + f[1] * 26) / TS)); if (ORE[tc]) setHint("[F/Espaço] Minerar " + ORE[tc].n + (ORE[tc].tier > MN().pick ? " (precisa de " + PICKS[ORE[tc].tier].nm + ")" : ""));
+}
+function drawTile(c, sx, sy, th, tx, ty) {
+  if (ORE[c]) {
+    drawTile0(".", sx, sy, th, tx, ty); const g = ctx, o = ORE[c], h = ((tx * 73856093) ^ (ty * 19349663)) >>> 0, t = Date.now() / 1000;
+    g.fillStyle = "#4a4650"; g.fillRect(sx + 1, sy + 3, TS - 2, TS - 3); g.fillStyle = "#5e5a68"; g.fillRect(sx + 1, sy + 3, TS - 2, 7); g.fillStyle = "#3a3640"; g.fillRect(sx + 1, sy + TS - 6, TS - 2, 4); g.strokeStyle = "rgba(0,0,0,.4)"; g.strokeRect(sx + 1.5, sy + 3.5, TS - 3, TS - 4);
+    if (c !== "K") {
+      const n = c === "g" ? 1 : 4; for (let i = 0; i < n; i++) { const ox = sx + 6 + ((h >> (i * 3)) % 15), oy = sy + 11 + ((h >> (i * 3 + 7)) % 12); g.fillStyle = o.c2; g.beginPath(); g.moveTo(ox, oy - 5); g.lineTo(ox + 5, oy); g.lineTo(ox, oy + 5); g.lineTo(ox - 5, oy); g.closePath(); g.fill(); g.fillStyle = o.c; g.beginPath(); g.moveTo(ox, oy - 4); g.lineTo(ox + 3, oy - 1); g.lineTo(ox - 1, oy + 1); g.closePath(); g.fill(); }
+      if (c === "g") { g.fillStyle = "#e8d8c0"; g.beginPath(); g.ellipse(sx + 16, sy + 18, 10, 8, 0, 0, 6.283); g.fill(); g.fillStyle = "#8a7aa8"; g.beginPath(); g.ellipse(sx + 16, sy + 18, 6, 4, 0, 0, 6.283); g.fill(); }
+      if (c === "G" || c === "S" || c === "Y" || c === "H") { const a = .35 + .35 * Math.sin(t * 3 + h % 7); g.fillStyle = "rgba(255,255,255," + a.toFixed(2) + ")"; g.fillRect(sx + 6 + h % 18, sy + 8 + (h >> 4) % 16, 2, 2); }
+    } else { g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(sx + 6 + h % 10, sy + 14, 8, 3); g.fillStyle = "rgba(0,0,0,.18)"; g.fillRect(sx + 14, sy + 20 + h % 5, 9, 3); }
+    const k = D && D.hp && D.hp[tx + "," + ty]; if (k != null && k < o.hp) { g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(sx + 8, sy + 8); g.lineTo(sx + 16, sy + 17); g.lineTo(sx + 12, sy + 26); if (k < o.hp * .5) { g.moveTo(sx + 24, sy + 7); g.lineTo(sx + 17, sy + 16); g.lineTo(sx + 24, sy + 25); } g.stroke(); }
+    return;
+  }
+  if (c === "Q") { drawTile0(".", sx, sy, th, tx, ty); const g = ctx, t = Date.now() / 1000; g.fillStyle = "#58606c"; g.fillRect(sx + 2, sy + 2, TS - 4, TS - 4); g.fillStyle = "#e8b84b"; g.fillRect(sx + 4, sy + 4, TS - 8, 3); g.fillRect(sx + 4, sy + TS - 7, TS - 8, 3); g.fillStyle = "rgba(255,230,140," + (.5 + .3 * Math.sin(t * 3)).toFixed(2) + ")"; g.beginPath(); g.arc(sx + 16, sy + 16, 6, 0, 6.283); g.fill(); g.fillStyle = "#1a1a22"; g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.fillText("🛗", sx + 16, sy + 20); return; }
+  drawTile0(c, sx, sy, th, tx, ty);
+}
+function renderDungeon() {
+  renderDungeon0(); if (!(D && D.ore)) return; const g = ctx, M = MN();
+  OFX.forEach((q) => { g.globalAlpha = Math.min(1, q.t * 3); g.fillStyle = q.c; g.fillRect(q.x - camera.x, q.y - camera.y, 3, 3); }); g.globalAlpha = 1;
+  const px = P.x - camera.x, py = P.y - camera.y, rad = Math.max(150, 300 - D.floor * 4), gr = g.createRadialGradient(px, py, rad * .3, px, py, rad); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(0,0,0," + Math.min(.82, .35 + D.floor * .012).toFixed(2) + ")"); g.fillStyle = gr; g.fillRect(0, 0, VIEW_W, VIEW_H);
+  const fl = .06 * Math.sin(Date.now() / 120); g.fillStyle = "rgba(255,190,90," + (.05 + fl).toFixed(3) + ")"; g.beginPath(); g.arc(px, py, 70, 0, 6.283); g.fill();
+  g.save(); g.fillStyle = "rgba(10,8,14,.72)"; g.fillRect(VIEW_W / 2 - 150, 8, 300, 36); g.fillStyle = "#e8b84b"; g.font = "bold 14px sans-serif"; g.textAlign = "center"; g.fillText("⛏️ Nível " + D.floor + " · " + PICKS[M.pick].nm, VIEW_W / 2, 24);
+  const need = 40 + M.lv * 25; g.fillStyle = "#2a2430"; g.fillRect(VIEW_W / 2 - 130, 30, 260, 6); g.fillStyle = "#6bd0ff"; g.fillRect(VIEW_W / 2 - 130, 30, 260 * Math.min(1, M.xp / need), 6); g.fillStyle = "#cdbf9f"; g.font = "9px sans-serif"; g.fillText("Mineração nv." + M.lv, VIEW_W / 2 + 100, 24); g.restore();
+  // seta para a escada quando Cookie está com você
+  if (petBuff("cookie")) { let fx = null; for (let y = 0; y < D.h && !fx; y++) for (let x = 0; x < D.w; x++) if (D.g[y][x] === ">") { fx = [x * TS + 16, y * TS + 16]; break; } if (fx) { const a = Math.atan2(fx[1] - P.y, fx[0] - P.x); g.save(); g.translate(px + Math.cos(a) * 52, py + Math.sin(a) * 52); g.rotate(a); g.fillStyle = "rgba(255,216,74,.85)"; g.beginPath(); g.moveTo(8, 0); g.lineTo(-6, -6); g.lineTo(-6, 6); g.closePath(); g.fill(); g.restore(); } }
+}
+// ---------- entrada da mina e painel do Chefe de Mina ----------
+Object.assign(NEWOBS, {
+  mineentry(g, o, sx, sy) {
+    const w = o.w, h = o.h, t = Date.now() / 1000; g.save(); g.fillStyle = "rgba(0,0,0,.25)"; g.beginPath(); g.ellipse(sx + w / 2, sy + h - 2, w * .55, 12, 0, 0, 6.283); g.fill();
+    g.fillStyle = "#6a6672"; g.beginPath(); g.moveTo(sx - 10, sy + h); g.lineTo(sx + 10, sy + 30); g.quadraticCurveTo(sx + w / 2, sy - 22, sx + w - 10, sy + 30); g.lineTo(sx + w + 10, sy + h); g.closePath(); g.fill(); g.fillStyle = "#7e7a88"; g.beginPath(); g.moveTo(sx + 10, sy + 30); g.quadraticCurveTo(sx + w / 2, sy - 22, sx + w * .45, sy + 6); g.lineTo(sx + w * .3, sy + 40); g.closePath(); g.fill();
+    g.fillStyle = "#0a0810"; g.beginPath(); g.moveTo(sx + 32, sy + h); g.lineTo(sx + 32, sy + 52); g.quadraticCurveTo(sx + w / 2, sy + 20, sx + w - 32, sy + 52); g.lineTo(sx + w - 32, sy + h); g.closePath(); g.fill();
+    g.fillStyle = "#6a4a2a"; g.fillRect(sx + 26, sy + 48, 8, h - 48); g.fillRect(sx + w - 34, sy + 48, 8, h - 48); g.fillRect(sx + 22, sy + 44, w - 44, 8); g.fillStyle = "#8a6238"; g.fillRect(sx + 22, sy + 44, w - 44, 3);
+    for (const lx of [sx + 38, sx + w - 44]) { g.fillStyle = "#3a3a44"; g.fillRect(lx, sy + 54, 2, 12); g.fillStyle = "#ffcf6a"; g.fillRect(lx - 3, sy + 64, 8, 9); const gr = g.createRadialGradient(lx + 1, sy + 68, 2, lx + 1, sy + 68, 36); gr.addColorStop(0, "rgba(255,200,100," + (.45 + .1 * Math.sin(t * 5)).toFixed(2) + ")"); gr.addColorStop(1, "rgba(255,200,100,0)"); g.fillStyle = gr; g.fillRect(lx - 38, sy + 30, 78, 78); }
+    g.fillStyle = "#4a2f18"; g.fillRect(sx + w / 2 - 44, sy + 24, 88, 14); g.fillStyle = "#f4ead7"; g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.fillText("MINA DO PEDREGULHO", sx + w / 2, sy + 34);
+    g.fillStyle = "#c9a24a"; g.fillRect(sx + 40, sy + h - 10, 14, 8); g.fillStyle = "#e0c070"; g.fillRect(sx + 42, sy + h - 14, 10, 5); g.restore();
+  },
+});
+function mineOpenPanel() { if (ui !== null) return; ui = "mineup"; const o = document.getElementById("overlay-mine"); o.innerHTML = minePanelHTML(); o.classList.remove("hidden"); }
+function mineClosePanel() { const o = document.getElementById("overlay-mine"); if (o) o.classList.add("hidden"); if (ui === "mineup") ui = null; saveGame(); }
+function mcostText(c) { return Object.keys(c).map((k) => k === "g" ? c.g + " 🪙" : c[k] + " " + RES[k].ic).join(" · "); }
+function mcan(c) { return X.testMode || Object.keys(c).every((k) => k === "g" ? gold >= c.g : rs(k) >= c[k]); }
+function minePanelHTML() {
+  const M = MN(); let s = "<h2>⛏️ Chefe de Mina Pedra-Dura</h2><p class='lead'>Picareta: <b>" + PICKS[M.pick].nm + "</b> · Mineração nv." + M.lv + " · Recorde: nível " + (M.best || 0) + " · 🪙 " + Math.floor(gold) + "</p><div class='cards' style='grid-template-columns:1fr;max-height:none'>";
+  if (M.pick < PICKS.length - 1) { const nx = PICKS[M.pick + 1]; s += "<div class='card'><h3>🔨 Melhorar para " + nx.nm + "</h3><p class='mini'>Quebra minérios mais duros mais rápido. Custo: " + mcostText(nx.cost) + "</p><button data-m='up'" + (mcan(nx.cost) ? "" : " disabled") + ">Melhorar</button></div>"; } else s += "<div class='card'><h3>🔨 Picareta no máximo!</h3></div>";
+  s += "<div class='card'><h3>🛗 Elevador</h3><p class='mini'>Desça direto a um nível já ativado (cada 5º nível tem uma plataforma 🛗).</p><div class='row'>" + M.elev.map((n) => "<button data-m='go' data-n='" + n + "'>Nível " + n + "</button>").join("") + "</div></div>";
+  s += "<div class='card'><h3>💰 Vender minérios</h3><div class='row' style='flex-direction:column;gap:4px'>" + Object.keys(MINEPRICE).map((k) => { const n = rs(k), keep = (k === "ferro" || k === "titanio" || k === "cristal_roxo") ? 30 : 0, sell = Math.max(0, n - keep); return "<div style='display:flex;gap:6px;align-items:center'><span style='flex:1'>" + RES[k].ic + " " + RES[k].n + ": <b>" + n + "</b> <span class='mini'>(" + MINEPRICE[k] + " 🪙 cada" + (keep ? ", guardo " + keep : "") + ")</span></span><button data-m='sell' data-k='" + k + "'" + (sell ? "" : " disabled") + ">Vender " + sell + "</button></div>"; }).join("") + "</div></div>";
+  return s + "</div><div class='row' style='margin-top:6px'><button class='ghost' data-m='close'>Fechar (Esc)</button></div>";
+}
+function minePanelClick(e) {
+  const b = e.target.closest && e.target.closest("[data-m]"); if (!b || b.disabled) return; const a = b.getAttribute("data-m"), M = MN();
+  if (a === "close") { mineClosePanel(); return; }
+  if (a === "up" && M.pick < PICKS.length - 1) { const nx = PICKS[M.pick + 1]; if (mcan(nx.cost)) { if (!X.testMode) Object.keys(nx.cost).forEach((k) => { if (k === "g") gold -= nx.cost.g; else radd(k, -nx.cost[k]); }); M.pick++; toast("🔨 " + nx.nm + " forjada!", 3000); } }
+  if (a === "go") { const n = +b.getAttribute("data-n"); mineClosePanel(); const trg = W.trig.find((t) => t.id === "ore"); enterOre(trg, n); return; }
+  if (a === "sell") { const k = b.getAttribute("data-k"), keep = (k === "ferro" || k === "titanio" || k === "cristal_roxo") ? 30 : 0, n = Math.max(0, rs(k) - keep); if (n) { const g = n * MINEPRICE[k]; radd(k, -n); gold += g; toast("💰 +" + g + " 🪙 por " + n + " " + RES[k].n, 2200); } }
+  document.getElementById("overlay-mine").innerHTML = minePanelHTML();
+}
+function mineInit() {
+  const st = document.createElement("style"); st.textContent = "#overlay-mine .card{text-align:left;background:#211b15;border:1px solid #4a3d2e;border-radius:10px;padding:10px 12px;width:min(620px,100%)}#overlay-mine h3{margin:0 0 4px;color:#ffd84a}#overlay-mine .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#overlay-mine{justify-content:flex-start;z-index:21}#overlay-mine button[disabled]{opacity:.45}"; document.head.appendChild(st);
+  const o = document.createElement("div"); o.id = "overlay-mine"; o.className = "overlay hidden"; el["overlay-start"].parentNode.appendChild(o); o.addEventListener("click", minePanelClick);
+  window.addEventListener("keydown", (e) => { if (e.code === "Escape" && ui === "mineup") { e.stopImmediatePropagation(); mineClosePanel(); } }, true);
+  if (window.PV) Object.assign(window.PV, { MN, genOreFloor, enterOre, oreGo, oreSwing, mineOpenPanel, ORE, PICKS, getD: () => D, scn: () => scene });
+}
+
+// ============================================================
+// pv29: MISSÕES PLANETÁRIAS + HISTÓRIA (Cake & Cookie)
+// ============================================================
+Object.assign(X, { pq: { s: {}, k: {}, fx: {} } });
+function PQ_() { const p = X.pq || (X.pq = {}); if (!p.s) p.s = {}; if (!p.k) p.k = {}; if (!p.fx) p.fx = {}; return p; }
+function CC() { const s = ST(); if (!s.cc) s.cc = {}; return s.cc; }
+
+// ---------- NPCs (visuais) ----------
+const GV = {
+  eng:   { nome: "Engenheira Fio-de-Prumo", main: "#c9a06a", dark: "#8a5a34", collar: "#e8b84b", hat: "#e8b84b" },
+  pesca: { nome: "Pescador Bigodes", main: "#8aa4b8", dark: "#566a7a", collar: "#3fa6d6", hat: "#d9c48a" },
+  padei: { nome: "Padeiro Miau", main: "#e7d9b8", dark: "#b8a97e", collar: "#c9455a", hat: "#ffffff" },
+  astro: { nome: "Técnica Orbital Lyra", main: "#dfe6ee", dark: "#9aa6b2", collar: "#e8b84b", hat: "#dfe6ee" },
+  rover: { nome: "Mecânico Poeira", main: "#b8743a", dark: "#7a4624", collar: "#d9b25c", hat: "#d9c48a" },
+  cacad: { nome: "Caçadora de Dunas", main: "#d8a864", dark: "#8a5a34", collar: "#c9455a" },
+  gelo:  { nome: "Meteorologista Flocos", main: "#d6e8f2", dark: "#8fb4cc", collar: "#8fe0ff", hat: "#8fe0ff" },
+  igl:   { nome: "Vigia do Iglu", main: "#eef6fb", dark: "#9cc4de", collar: "#3fa6d6" },
+  forja: { nome: "Aprendiz de Forja Brasa", main: "#b4472b", dark: "#6e2314", collar: "#d9b25c", hat: "#2a2420" },
+  mine:  { nome: "Geóloga Cinzenta", main: "#7a7a86", dark: "#4a4a56", collar: "#e8b84b", hat: "#e8b84b" },
+  lobo:  { nome: "Filhote Perdido Pelúcio", main: "#9a9ea8", dark: "#5a5e68", collar: "#c9455a" },
+  anciao:{ nome: "Rastreadora Lua-Cheia", main: "#cfd6de", dark: "#7f8a98", collar: "#e8b84b" },
+  eco:   { nome: "Sentinela do Eco", main: "#cfe0f0", dark: "#7f98b8", collar: "#a77bf0", hat: "#a77bf0" },
+  uivo:  { nome: "Afinadora Harmônica", main: "#8a7fb8", dark: "#4a4276", collar: "#ffe27a" },
+  aur:   { nome: "Astrônomo Boreal", main: "#6fe8c8", dark: "#2f9a80", collar: "#ffe27a", hat: "#3a7ab8" },
+  toca:  { nome: "Tatu Escavador Rufo", main: "#a88a6a", dark: "#5a4630", collar: "#c9455a", hat: "#e8b84b" },
+};
+// posições relativas ao módulo de pouso (pad)
+const GPOS = [[210, -170], [330, 150], [160, 230], [470, -250], [420, 260], [250, 40], [560, 40], [620, -150], [120, -110]];
+
+// ---------- DADOS DAS MISSÕES ----------
+// k: res (entregar n de r) | fix (consertar ponto: cost) | kill (derrotar n inimigos)
+// fx: tipo do ponto de reparo (visual)
+const PQD = {
+  felinus: { titulo: "A Represa Seca", icone: "🌊", intro: "Planeta Felino enfrenta falta de água: a represa do Rio Novelo ruiu.", q: [
+    { id: "fe1", g: "eng", t: "Escorar a Comporta", ask: "A represa do Rio Novelo ruiu e metade do planeta está sem água! Preciso de 6 Madeiras para escorar a comporta. Pode ajudar?", k: "res", r: "madeira", n: 6, done: "Isso segura a estrutura! Agora falta consertar a engrenagem da comporta — fica ali na represa.", rw: { ouro: 120 } },
+    { id: "fe2", g: "eng", after: "fe1", t: "Consertar a Comporta", ask: "Leve 4 Ferros até a comporta da represa (marcada no chão) e aperte F para encaixar a engrenagem.", k: "fix", fx: "dam", pos: [520, 330], r: "ferro", n: 4, label: "Comporta da Represa", done: "A água voltou a correr! Ouça só o rio cantando de novo...", rw: { ouro: 200, fragmento: 1 } },
+    { id: "fe3", g: "eng", after: "fe2", t: "Os Roedores Mecânicos", ask: "Ratbots roeram os cabos da bomba de irrigação. Derrote 4 deles pelos campos para eu consertar tudo!", k: "kill", n: 4, done: "Sem eles, a irrigação funciona. A cidade inteira agradece! Leve isto — o planeta agora é seu amigo.", rw: { fragmento: 3, ouro: 350, catnip: 4 } },
+    { id: "fe4", g: "pesca", t: "A Vara Perdida", ask: "Com o rio seco, minha vara de pesca ficou presa na lama do leito. Pode pegá-la ali no rio (marcado)?", k: "fix", fx: "item", pos: [380, 380], label: "Vara de Pesca", n: 0, done: "Minha vara! Em troca, esta pérola que achei no leito.", rw: { perola: 2, ouro: 80 } },
+    { id: "fe5", g: "padei", t: "Pão de Erva-de-Gato", ask: "Para o Festival da Água preciso de 3 Ervas-de-Gato Estelares. Os gatos fazem fila!", k: "res", r: "catnip", n: 3, done: "Os pães ficaram divinos! Pegue a comida de brinde.", rw: { comida: 6, ouro: 100 } } ] },
+  lua: { titulo: "Antena Muda", icone: "📡", intro: "Lua Prateada: a antena de comunicação perdeu o sinal; um astronauta náufrago espera resgate.", q: [
+    { id: "lu1", g: "astro", t: "Combustível para a Antena", ask: "A antena da Lua está sem energia. Preciso de 5 Hélio-3 para o gerador!", k: "res", r: "helio3", n: 5, done: "Gerador ligado! Agora alinhe a antena com 3 Circuitos Raros.", rw: { ouro: 120 } },
+    { id: "lu2", g: "astro", after: "lu1", t: "Alinhar a Antena", ask: "Leve 3 Circuitos Raros à antena parabólica (marcada) e aperte F.", k: "fix", fx: "antenna", pos: [560, -200], r: "circuito", n: 3, label: "Antena Parabólica", done: "Sinal restaurado! A Terra já responde — e um recado estranho veio junto, sobre um 'Sinal'...", rw: { ouro: 250, fragmento: 2 } },
+    { id: "lu3", g: "astro", after: "lu2", t: "Poeira Hostil", ask: "Dustlings estão cobrindo os painéis solares. Elimine 5 deles!", k: "kill", n: 5, done: "Painéis limpos! Você é nosso herói lunar.", rw: { fragmento: 3, helio3: 4 } } ] },
+  rubra: { titulo: "Cânions Sedentos", icone: "🏜️", intro: "Rubra: o poço central secou e o rover do vilarejo quebrou.", q: [
+    { id: "ru1", g: "rover", t: "Peças para o Rover", ask: "Meu rover quebrou e o poço secou. Traga 8 Ferros para eu voltar a transportar água!", k: "res", r: "ferro", n: 8, done: "Rover rodando! Agora o poço: ele precisa de uma bomba nova.", rw: { ouro: 150 } },
+    { id: "ru2", g: "rover", after: "ru1", t: "Religar a Bomba", ask: "Leve 3 Titânios ao poço (marcado) e aperte F para instalar a bomba nova.", k: "fix", fx: "pump", pos: [440, 250], r: "titanio", n: 3, label: "Poço do Vilarejo", done: "ÁGUA! O vilarejo inteiro está dançando. Escorpiões, porém, andam rondando...", rw: { ouro: 250, fragmento: 1 } },
+    { id: "ru3", g: "cacad", after: "ru2", t: "Escorpiões do Poço", ask: "Escorpiões gigantes atacam quem busca água. Derrote 4 para proteger o poço!", k: "kill", n: 4, done: "O poço está seguro! Você é lenda nos cânions.", rw: { fragmento: 3, titanio: 3, ouro: 300 } } ] },
+  gelida: { titulo: "O Degelo Perdido", icone: "❄️", intro: "Gélida: o aquecedor do iglu falhou e a tempestade se aproxima.", q: [
+    { id: "ge1", g: "gelo", t: "Combustível Térmico", ask: "O aquecedor do iglu apagou e a tempestade chega! Preciso de 3 Núcleos de Magma.", k: "res", r: "plasma", n: 3, done: "Com isso o gerador acende. Agora ligue o aquecedor no iglu (marcado).", rw: { ouro: 150 } },
+    { id: "ge2", g: "gelo", after: "ge1", t: "Religar o Aquecedor", ask: "Leve 2 Cristais Gélidos ao aquecedor (marcado) para estabilizar o núcleo.", k: "fix", fx: "heater", pos: [500, -230], r: "cristal_gelo", n: 2, label: "Aquecedor do Iglu", done: "Calor! O iglu brilha de novo. Mas lobos de gelo rondam...", rw: { ouro: 250, fragmento: 1 } },
+    { id: "ge3", g: "igl", after: "ge2", t: "Lobos da Tempestade", ask: "Lobos de gelo ameaçam os filhotes do iglu. Derrote 4!", k: "kill", n: 4, done: "Os filhotes estão a salvo. Leve esta lembrança gélida.", rw: { fragmento: 3, cristal_gelo: 3, ouro: 300 } } ] },
+  ignis: { titulo: "A Forja Apagada", icone: "🌋", intro: "Ignis: a Grande Forja esfriou e o vulcão ameaça acordar.", q: [
+    { id: "ig1", g: "forja", t: "Carvão Estelar", ask: "A forja apagou e o vulcão roncou! Traga 4 Minérios Estelares para eu reacender.", k: "res", r: "minerio", n: 4, done: "As brasas voltam! Mas a válvula de magma precisa ser fechada.", rw: { ouro: 150 } },
+    { id: "ig2", g: "forja", after: "ig1", t: "Fechar a Válvula", ask: "Leve 3 Ferros até a válvula de magma (marcada) e feche-a com F.", k: "fix", fx: "valve", pos: [520, 280], r: "ferro", n: 3, label: "Válvula de Magma", done: "O vulcão se acalmou! Nunca vi tanta coragem num cão.", rw: { ouro: 300, fragmento: 2 } },
+    { id: "ig3", g: "forja", after: "ig2", t: "Emberlings Rebeldes", ask: "Os emberlings fugiram da forja. Derrote 5 para garantir a calma.", k: "kill", n: 5, done: "A forja está de volta! Um presente do Mestre Forjador.", rw: { fragmento: 3, plasma: 3, ouro: 350 } } ] },
+  matilha: { titulo: "O Rastro da Matilha", icone: "🐺", intro: "Matilha: os filhotes se perderam no vale e o farol de uivo está apagado.", q: [
+    { id: "ma1", g: "lobo", t: "Filhote Perdido", ask: "Estou perdido... meus irmãos foram atrás do eco. Pode encontrar o farol de uivo (marcado) e ver se está funcionando?", k: "fix", fx: "beacon", pos: [520, -250], label: "Farol de Uivo", n: 0, done: "Ouvi o uivo! Agora eles sabem o caminho de volta.", rw: { ouro: 150, fragmento: 1 } },
+    { id: "ma2", g: "anciao", t: "Lobos Sombrios", ask: "Lobos sombrios rondam a toca. Derrote 4 para a Matilha voltar para casa.", k: "kill", n: 4, done: "A Matilha é grata. Cake e Cookie... esses nomes ecoam em nossas memórias.", rw: { fragmento: 3, ouro: 300 } } ] },
+  eco: { titulo: "O Eco Desafinado", icone: "🔊", intro: "Eco: a torre de ressonância perdeu a afinação.", q: [
+    { id: "ec1", g: "eco", t: "Cristais Afinadores", ask: "A torre desafinou. Traga 3 Cristais Gélidos para recalibrar!", k: "res", r: "cristal_gelo", n: 3, done: "Afinada! O eco voltou ao normal.", rw: { ouro: 200, fragmento: 2 } } ] },
+  uivo: { titulo: "A Sinfonia Perdida", icone: "🎼", intro: "Uivo: a afinadora procura os cristais da sinfonia.", q: [
+    { id: "ui1", g: "uivo", t: "Cristais Espectrais", ask: "Para afinar o Grande Coro preciso de 4 Cristais Espectrais.", k: "res", r: "cristal_roxo", n: 4, done: "Ouça! É a Sinfonia dos Ossos!", rw: { ouro: 250, fragmento: 2 } } ] },
+  aurora: { titulo: "Auroras Apagadas", icone: "🌌", intro: "Aurora: o observatório parou e as luzes do céu sumiram.", q: [
+    { id: "au1", g: "aur", t: "Lente do Observatório", ask: "O observatório precisa de 3 Cristais Gélidos para a lente.", k: "res", r: "cristal_gelo", n: 3, done: "Veja o céu! As auroras voltaram!", rw: { ouro: 250, fragmento: 2 } } ] },
+  toca: { titulo: "O Túnel Desabado", icone: "🕳️", intro: "Toca: um túnel desabou e prendeu escavadores.", q: [
+    { id: "to1", g: "toca", t: "Escoras de Ferro", ask: "O túnel desabou! Traga 6 Ferros para escorar as galerias.", k: "res", r: "ferro", n: 6, done: "Escavadores livres! Pegue sua parte do achado.", rw: { ouro: 250, minerio: 3, fragmento: 1 } } ] },
+};
+const PQ_BY_ID = {}; Object.keys(PQD).forEach((pid) => PQD[pid].q.forEach((q) => { q.pl = pid; PQ_BY_ID[q.id] = q; }));
+const PQ_GIVERS = {}; // por planeta: gid -> índice
+
+function pqSt(q) { return PQ_().s[q.id] || 0; }
+function pqAvail(q) { return !q.after || pqSt(PQ_BY_ID[q.after]) === 2; }
+function pqGiverId(q) { return "pq_" + q.pl + "_" + q.g; }
+function pqPos(pl, q) { return { x: pl.pad.x + q.pos[0], y: pl.pad.y + q.pos[1] }; }
+function pqStepText(q) {
+  const st = pqSt(q);
+  if (st === 0) return "fale com " + GV[q.g].nome;
+  if (q.k === "res") return "entregue " + q.n + " " + RES[q.r].ic + " " + RES[q.r].n + " (" + Math.min(rs(q.r), q.n) + "/" + q.n + ") a " + GV[q.g].nome;
+  if (q.k === "kill") return "derrote " + q.n + " inimigos (" + Math.min(PQ_().k[q.id] || 0, q.n) + "/" + q.n + ")";
+  if (q.k === "fix") return PQ_().fx[q.id] ? "volte a " + GV[q.g].nome : "vá até " + q.label + (q.n ? " e leve " + q.n + " " + RES[q.r].ic : "");
+  return "";
+}
+function pqActive(pid) { const D = PQD[pid]; if (!D) return null; return D.q.find((q) => pqSt(q) === 1) || null; }
+function pqDoneCount(pid) { return PQD[pid].q.filter((q) => pqSt(q) === 2).length; }
+
+// ---------- gerar givers/pontos de reparo no planeta ----------
+function genPlanet(id) {
+  const pl = genPlanet0(id), D = PQD[id]; if (!D) return pl;
+  const gids = []; D.q.forEach((q) => { if (gids.indexOf(q.g) < 0) gids.push(q.g); });
+  pl.pqFix = [];
+  gids.forEach((g, i) => {
+    const p = GPOS[i % GPOS.length], d = GV[g], x = pl.pad.x + p[0], y = pl.pad.y + p[1];
+    pl.obs = pl.obs.filter((o) => Math.hypot(o.x + o.w / 2 - x, o.y + o.h / 2 - y) > 90);
+    pl.enemies = pl.enemies.filter((e) => Math.hypot(e.x - x, e.y - y) > 300);
+    pl.npcs.push(mkNPC({ id: "pq_" + id + "_" + g, nome: d.nome, x, y, main: d.main, dark: d.dark, collar: d.collar, hat: d.hat, r: 36, pq: g, lines: ["O planeta precisa de ajuda... e você me parece capaz.", "Obrigado por tudo que tem feito por aqui."] }));
+  });
+  D.q.forEach((q) => { if (q.k === "fix") { const p = pqPos(pl, q); pl.obs = pl.obs.filter((o) => Math.hypot(o.x + o.w / 2 - p.x, o.y + o.h / 2 - p.y) > 80); pl.pqFix.push({ q: q.id, x: p.x, y: p.y }); } });
+  return pl;
+}
+
+// ---------- conversas ----------
+function pqSay(n, q, text, fn) {
+  const d = GV[q.g] || { nome: n.nome };
+  if (!startCut([{ bars: 1 }, sy(d.nome, text), { bars: 0, fn: fn || (() => { }) }])) { toast(d.nome + ": “" + text + "”", 5200); if (fn) fn(); }
+}
+function pqComplete(n, q) {
+  const P_ = PQ_(); P_.s[q.id] = 2;
+  if (q.k === "res") radd(q.r, -q.n);
+  X.friend[n.id] = Math.min(100, (X.friend[n.id] || 0) + 12);
+  pqSay(n, q, q.done, () => { giveRewardLite(q.rw || {}); toast("✅ Missão concluída: " + q.t + " — " + rewardText(q.rw || {}), 5200); try { saveGame(); } catch (e) { } });
+}
+function pqTalk(n) {
+  if (!n.pq || !PL) return false;
+  const list = PQD[PL.id] ? PQD[PL.id].q.filter((q) => q.g === n.pq && pqSt(q) < 2 && pqAvail(q)) : []; if (!list.length) return false;
+  const q = list.find((x) => pqSt(x) === 1) || list[0], st = pqSt(q);
+  if (st === 0) { pqSay(n, q, q.ask, () => { PQ_().s[q.id] = 1; if (q.k === "kill") PQ_().k[q.id] = 0; toast("📜 Nova missão: " + q.t + " — " + pqStepText(q), 5200); }); return true; }
+  const ok = q.k === "res" ? rs(q.r) >= q.n : q.k === "kill" ? (PQ_().k[q.id] || 0) >= q.n : !!PQ_().fx[q.id];
+  if (ok) { pqComplete(n, q); return true; }
+  toast(n.nome + ": “Ainda preciso de ajuda com: " + q.t + "” → " + pqStepText(q), 5200); return true;
+}
+
+// ---------- pontos de reparo ----------
+function pqFixNear() {
+  if (!PL || !PL.pqFix) return null;
+  for (let i = 0; i < PL.pqFix.length; i++) { const f = PL.pqFix[i], q = PQ_BY_ID[f.q]; if (pqSt(q) === 1 && !PQ_().fx[q.id] && dist(P.x, P.y, f.x, f.y) < 80) return { f, q }; }
+  return null;
+}
+function pqDoFix(h) {
+  const q = h.q;
+  if (q.n && rs(q.r) < q.n) { toast("🔧 " + q.label + ": precisa de " + q.n + " " + RES[q.r].ic + " " + RES[q.r].n + " (você tem " + rs(q.r) + ").", 3600); return; }
+  if (q.n) radd(q.r, -q.n);
+  PQ_().fx[q.id] = 1;
+  toast("🔧 " + q.label + " consertado! Volte a falar com " + GV[q.g].nome + ".", 4200); try { saveGame(); } catch (e) { }
+}
+function planetInteract() { const h = pqFixNear(); if (h && !nearStruct() && !nearestOf(PL.npcs, P.x, P.y, 62)) { pqDoFix(h); return; } planetInteract0(); }
+function planetHint() { const h = pqFixNear(); if (h && !nearestOf(PL.npcs, P.x, P.y, 62)) return "[F] 🔧 " + h.q.label + (h.q.n ? " (usa " + h.q.n + " " + RES[h.q.r].ic + ")" : ""); return planetHint0(); }
+
+// ---------- desenho: pontos de reparo + marcadores ----------
+const FXI = { dam: ["🚧", "💧"], antenna: ["📡", "📡"], pump: ["⛲", "💧"], heater: ["🧊", "🔥"], valve: ["🌋", "🛑"], beacon: ["🗼", "🐺"], item: ["🎣", "✔"] };
+function renderPlanet() {
+  renderPlanet0(); if (!PL || !PL.pqFix) return;
+  const g = ctx, t = Date.now() / 1000;
+  PL.pqFix.forEach((f) => {
+    const q = PQ_BY_ID[f.q], st = pqSt(q), fixed = !!PQ_().fx[q.id] || st === 2, sx = f.x - camera.x, sy = f.y - camera.y; if (sx < -200 || sx > VIEW_W + 200 || sy < -200 || sy > VIEW_H + 200) return;
+    if (st === 0 && !fixed) return;
+    g.save(); const I = FXI[q.fx] || ["🔧", "✔"];
+    if (fixed && (q.fx === "dam" || q.fx === "pump")) { g.fillStyle = "rgba(70,170,235,.75)"; g.beginPath(); g.moveTo(sx - 20, sy + 20); for (let i = 0; i <= 12; i++) g.lineTo(sx - 20 + i * 24, sy + 24 + Math.sin(t * 3 + i) * 3); for (let i = 12; i >= 0; i--) g.lineTo(sx - 20 + i * 24, sy + 52 + Math.sin(t * 3 + i + 1) * 3); g.closePath(); g.fill(); }
+    g.fillStyle = fixed ? "rgba(60,200,120,.28)" : "rgba(255,200,60," + (.18 + .1 * Math.sin(t * 4)).toFixed(2) + ")"; g.beginPath(); g.ellipse(sx, sy + 10, 46, 20, 0, 0, 6.283); g.fill();
+    g.strokeStyle = fixed ? "#5fd08a" : "#e8b84b"; g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath(); g.ellipse(sx, sy + 10, 46, 20, 0, 0, 6.283); g.stroke(); g.setLineDash([]);
+    g.font = "34px system-ui"; g.textAlign = "center"; g.fillStyle = "#fff"; g.fillText(fixed ? I[1] : I[0], sx, sy + 4 + (fixed ? 0 : Math.sin(t * 3) * 2));
+    g.font = "bold 11px system-ui"; g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 3; g.strokeText(q.label, sx, sy + 38); g.fillText(q.label, sx, sy + 38);
+    g.restore();
+  });
+  PL.npcs.forEach((n) => {
+    if (!n.pq) return; const l = PQD[PL.id].q.filter((q) => q.g === n.pq && pqSt(q) < 2 && pqAvail(q)); if (!l.length) return;
+    const q = l.find((x) => pqSt(x) === 1) || l[0], st = pqSt(q), ready = st === 1 && (q.k === "res" ? rs(q.r) >= q.n : q.k === "kill" ? (PQ_().k[q.id] || 0) >= q.n : !!PQ_().fx[q.id]);
+    const sx = n.x - camera.x, sy = n.y - camera.y - 66 + Math.sin(t * 3) * 3; g.save(); g.font = "bold 26px system-ui"; g.textAlign = "center"; g.fillStyle = ready ? "#7dffa0" : st === 0 ? "#ffd84a" : "#9ab"; g.strokeStyle = "rgba(0,0,0,.8)"; g.lineWidth = 4; const ic = ready ? "✔" : st === 0 ? "❗" : "…"; g.strokeText(ic, sx, sy); g.fillText(ic, sx, sy); g.restore();
+  });
+}
+
+// ---------- tick (contagem de inimigos) ----------
+function pqTick() {
+  if (!started || scene !== "planet" || !PL) return;
+  const a = PQD[PL.id] ? PQD[PL.id].q.filter((q) => pqSt(q) === 1 && q.k === "kill") : [];
+  PL.enemies.forEach((e) => { if (e.dead) { if (!e._pqc) { e._pqc = 1; if (a.length) { const q = a[0], P_ = PQ_(); P_.k[q.id] = (P_.k[q.id] || 0) + 1; if (P_.k[q.id] === q.n) toast("🎯 Meta cumprida! Volte a falar com " + GV[q.g].nome + ".", 3600); else if (P_.k[q.id] < q.n) toast("🎯 " + P_.k[q.id] + "/" + q.n, 1200); } } } else e._pqc = 0; });
+}
+
+// ---------- objetivo e diário ----------
+function objective() {
+  try { if (scene === "planet" && PL) { const q = pqActive(PL.id); if (q) return "🪐 " + BODIES[PL.id].nome + " · " + PQD[PL.id].titulo + " — " + q.t + ": " + pqStepText(q); } } catch (e) { }
+  const s = ST(), c = CC(); if (started && s.seen.intro && !c.met) return "Capítulo I — A Herança: procure a casa da Vovó, no Vale Lareira (Cake e Cookie estão esperando).";
+  let r = objective0(); if (c.matilha && !c.final && /^Capítulo (VII|VIII)/.test(r)) r += " · 🐕 Cake e Cookie sentem o chamado final.";
+  return r;
+}
+function tabLore() {
+  let h = tabLore0(); h += "<h3 style='color:var(--gold)'>🪐 Missões Planetárias</h3>";
+  Object.keys(PQD).forEach((pid) => {
+    const D = PQD[pid], B = BODIES[pid]; if (!B) return; const seen = X.visited && X.visited[pid], dn = pqDoneCount(pid);
+    h += "<div class='card' style='margin-bottom:6px'><h4>" + D.icone + " " + B.nome + " — " + D.titulo + " (" + dn + "/" + D.q.length + ")</h4>";
+    if (!seen) h += "<p class='mini'>🔒 Visite este mundo para descobrir o problema dele.</p>";
+    else { h += "<p class='mini'>" + D.intro + "</p>"; D.q.forEach((q) => { const st = pqSt(q), av = pqAvail(q); h += "<p class='mini'>" + (st === 2 ? "✅" : st === 1 ? "🔸" : av ? "❗" : "🔒") + " " + q.t + (st === 1 ? " — " + pqStepText(q) : "") + "</p>"; }); }
+    h += "</div>";
+  });
+  const c = CC(); h += "<h3 style='color:var(--gold)'>🐕 Cake & Cookie</h3><div class='card'><p class='mini'>" + (c.met ? "Seus Pinschers pretos e bege guardam o Sinal. Cake (🐾 farejadora) aumenta o ouro da mina; Cookie (👂 ouvido absoluto) ajuda a encontrar o elevador." + (c.crystal ? " ✔ Cristal Ressonante" : "") + (c.matilha ? " ✔ Raízes na Matilha" : "") + (c.final ? " ✔ O Chamado" : "") : "Você ainda não os conheceu.") + "</p></div>";
+  return h;
+}
+
+// ============================================================
+// CAKE & COOKIE
+// ============================================================
+function petActive(k) { try { const c = CC(); return !!c.met && (k === "cake" || k === "cookie"); } catch (e) { return false; } }
+function buildCC(Wd) {
+  const hx = HOME_SPOT.x + 70, hy = HOME_SPOT.y + 90;
+  Wd.npcs.push(mkNPC({ id: "cake", nome: "Cake", x: hx, y: hy, main: "#1d1a1b", dark: "#0c0a0b", collar: "#c9455a", tan: 1, special: "cc", scale: 2.4, r: 90, lines: ["Au! Sinto cheiro de minério daqui!"] }));
+  Wd.npcs.push(mkNPC({ id: "cookie", nome: "Cookie", x: hx + 60, y: hy + 20, main: "#1d1a1b", dark: "#0c0a0b", collar: "#3fa6d6", tan: 1, special: "cc", scale: 2.4, r: 90, lines: ["Ouvi algo no vento..."] }));
+}
+function npcExtras(n, x, y, face, s) {
+  npcExtras0(n, x, y, face, s); if (!n.tan) return;
+  const g = ctx, bw = 9 * s, bh = 6 * s, hh = 5 * s, by = Math.round(y - bh - s), hy = Math.round(by - hh + 2 * s); g.save(); g.fillStyle = "#d7a566";
+  if (face !== "up") { g.fillRect(Math.round(x - 2.6 * s), Math.round(hy + .4 * s), Math.round(1.1 * s), Math.round(.9 * s)); g.fillRect(Math.round(x + 1.5 * s), Math.round(hy + .4 * s), Math.round(1.1 * s), Math.round(.9 * s)); g.fillRect(Math.round(x - 1.2 * s), Math.round(hy + 3.2 * s), Math.round(2.4 * s), Math.round(1.1 * s)); }
+  g.fillRect(Math.round(x - 1.3 * s), Math.round(by + .2 * s), Math.round(2.6 * s), Math.round(1.4 * s));
+  g.fillRect(Math.round(x - bw / 2 + .5 * s), Math.round(by + bh - .8 * s), Math.round(1.8 * s), Math.round(1.2 * s)); g.fillRect(Math.round(x + bw / 2 - 2.3 * s), Math.round(by + bh - .8 * s), Math.round(1.8 * s), Math.round(1.2 * s)); g.restore();
+}
+function ccTalk(n) {
+  const c = CC(), f = X.friend[n.id] || 0, isC = n.id === "cake", L = [];
+  if (!c.met) return false;
+  if (c.final) L.push(isC ? "Au! Agora entendo por que nasci com esse faro: guardamos o Sinal juntos." : "O Sinal ficou claro. Estamos em casa em todo lugar.");
+  else if (c.matilha) L.push(isC ? "A Matilha é nossa família! Mas ainda sinto algo grande lá fora..." : "O uivo do Sinal está mais forte. Os três fragmentos nos chamam.");
+  else if (X.sysVisited && X.sysVisited.caomaior) L.push(isC ? "Cão Maior! Meu focinho coça... esse cheiro me é familiar." : "Ouvi um coro de lobos. Preciso ir ao planeta Matilha.");
+  else if (c.crystal) L.push(isC ? "Aquele cristal da mina ainda vibra em minha memória. Você vai ao espaço, certo?" : "O Sinal vem de algum lugar além do céu. Siga o foguete!");
+  else L.push(isC ? "Au! Leve-me à Mina! Sinto cheiro de minério lá no fundo." : "A mina canta baixinho... Chegando no nível 5 eu ouço algo!");
+  const g = L[0]; let extra = "";
+  if (f >= 40 && X.ccDay !== X.day + n.id) { X.ccDay = X.day + n.id; const o = isC ? { minerio: 1, ferro: 2 } : { ouro: 80 }; giveRewardLite(o); extra = " 🎁 " + (isC ? "Cake desenterrou " : "Cookie trouxe ") + rewardText(o); }
+  toast(n.nome + ": “" + g + "”" + extra + heartStr(n), 4800); return true;
+}
+function ccMeet() {
+  const c = CC(); if (c.met) return;
+  const cake = W.npcs.find((n) => n.id === "cake"), ck = W.npcs.find((n) => n.id === "cookie");
+  startCut([{ bars: 1 }, { cam: () => [HOME_SPOT.x + 100, HOME_SPOT.y + 100], cd: 1.2 }, sy("Cake", "Au! Finalmente chegou! Eu sou a Cake — farejo minérios a quilômetros."), sy("Cookie", "E eu sou o Cookie. Ouço coisas que ninguém ouve... Vovó nos deixou aqui para te esperar."),
+    sy("Cake", "Pretos com manchas bege, o orgulho da Vovó Estelária! Somos seus guardiões agora."), sy("Cookie", "Quando você descer a Mina até o nível 5, vou ouvir o Sinal mais claro. Leve-nos com você!"),
+    { bars: 0, fn: () => { c.met = 1; X.friend.cake = Math.max(X.friend.cake || 0, 10); X.friend.cookie = Math.max(X.friend.cookie || 0, 10); toast("🐕 Cake (+ minério na Mina) e Cookie (ouvido absoluto) agora acompanham você!", 6000); try { unlock("cake_cookie"); } catch (e) { } } }]);
+}
+LORE.push({ id: "cake_cookie", t: "Cake & Cookie", b: "Dois Pinschers pretos com manchas bege, deixados pela Vovó Estelária. Cake tem faro para minérios; Cookie ouve o Sinal. Guardiões de um segredo ainda maior." });
+LORE.push({ id: "cristal_ress", t: "O Cristal Ressonante", b: "Encontrado no nível 5 da Mina do Pedregulho, vibra na mesma frequência do Sinal que a Vovó seguia. Cookie é o único que entende o que ele 'diz'." });
+LORE.push({ id: "raizes_matilha", t: "Raízes na Matilha", b: "A Matilha Perdida reconheceu Cake e Cookie: são descendentes dos guardiões do primeiro Sinal. Por isso o faro e a audição fora do comum." });
+function mineStoryCheck(lv) {
+  const c = CC(); if (!c.met || c.crystal || lv < 5) return; c.crystal = 1;
+  setTimeout(() => { startCut([{ bars: 1 }, sy("Cookie", "...Parem. Escutem! Há um zumbido vindo da parede leste. É o Sinal!"), sy("Cake", "Farejei! Cristal Ressonante, bem ali! Cuidado, está quente."), sy("Cookie", "Ele canta a mesma nota que a Vovó assobiava. Precisamos levar isso para o espaço."), { bars: 0, fn: () => { radd("fragmento", 3); radd("cristal_roxo", 2); const s = ST(); s.codex.cristal_ress = 1; toast("🔮 Cristal Ressonante encontrado! +3 ⭐ +2 🔮 — Cookie ouviu o Sinal.", 6000); try { saveGame(); } catch (e) { } } }]); }, 700);
+}
+function enterPlanet(id) {
+  enterPlanet0(id); const c = CC();
+  if (id === "matilha" && c.met && !c.matilha) setTimeout(() => { if (scene !== "planet") return; startCut([{ bars: 1 }, sy("Rastreadora Lua-Cheia", "Esse cheiro... esses olhos! Cake? Cookie? Os filhotes do Primeiro Sinal!"), sy("Cookie", "Ela conhece nossos nomes... Eu lembro desse uivo!"), sy("Cake", "Somos da Matilha! Por isso sinto o rastro dos minérios... e Cookie ouve o Sinal!"), sy("Rastreadora Lua-Cheia", "Os fragmentos do mapa estão nas estruturas dos planetas. Procurem os três: eles abrem o caminho para Andrômeda."), { bars: 0, fn: () => { c.matilha = 1; const s = ST(); s.codex.raizes_matilha = 1; radd("fragmento", 5); X.friend.cake = Math.min(100, (X.friend.cake || 0) + 20); X.friend.cookie = Math.min(100, (X.friend.cookie || 0) + 20); toast("🐺 Raízes descobertas! +5 ⭐ — amizade com Cake e Cookie aumentou.", 6000); try { saveGame(); } catch (e) { } } }]); }, 1500);
+}
+function ccTick() {
+  if (!started || ui !== null || CUT) return;
+  try {
+    const c = CC(), s = ST();
+    if (scene === "world" && s.seen.intro && !c.met && W && W.npcs && dist(P.x, P.y, HOME_SPOT.x, HOME_SPOT.y) < 700) ccMeet();
+    if (scene === "world" && c.matilha && !c.final && (X.mapfrag || 0) >= 3) { c.final = 1; startCut([{ bars: 1 }, sy("Cookie", "O Sinal... está completo. Os três fragmentos cantam juntos!"), sy("Cake", "O caminho para Andrômeda se abriu! Au au!"), sy("Cookie", "A Vovó esperava por isso. Vamos terminar o que ela começou."), { bars: 0, fn: () => { gold += 500; toast("🌌 O Chamado: +500 🪙 — Cake e Cookie estão prontos para Andrômeda!", 6000); } }]); }
+  } catch (e) { }
+}
+function questInit() { setInterval(() => { try { pqTick(); ccTick(); } catch (e) { } }, 900); if (window.PV) Object.assign(window.PV, { PQD, PQ_, CC, ccMeet, pqTalk, pqFixNear, pqDoFix, genPlanet, mineStoryCheck }); }
+
 let last = performance.now();
 function loopCore(now) {
   const dt = Math.min((now - last) / 1000, 0.05); last = now;
@@ -4463,7 +5377,7 @@ function loopCore(now) {
 }
 let loopErr = 0;
 function loop(now) {
-  try { loopCore(now); } catch (e) { console.error("loop", e); loopErr++; try { if ((scene === "planet" && !PL) || (scene === "dungeon" && !D) || (scene === "interior" && !IN)) { scene = "world"; D = null; IN = null; PL = null; ui = null; P.x = 520; P.y = 470; } else if (scene === "space" && !SPC) { scene = "world"; ui = null; } } catch (e2) { } inputPrev = Object.assign({}, input); }
+  try { loopCore(now); } catch (e) { console.error("loop", e); loopErr++; try { if ((scene === "planet" && !PL) || (scene === "dungeon" && !D) || (scene === "interior" && !IN)) { scene = "world"; D = null; IN = null; PL = null; ui = null; P.x = HOME_SPOT.x; P.y = HOME_SPOT.y; } else if (scene === "space" && !SPC) { scene = "world"; ui = null; } } catch (e2) { } inputPrev = Object.assign({}, input); }
   requestAnimationFrame(loop);
 }
 function init() {
@@ -4475,7 +5389,7 @@ function init() {
   el.btnCloseClass.addEventListener("click", () => { el["overlay-class"].classList.add("hidden"); ui = null; });
   el.btnCloseShop.addEventListener("click", closeShop); el.btnCloseInventory.addEventListener("click", closeInventory); el.btnCloseForge.addEventListener("click", closeForge);
   el.btnOpenInventory.addEventListener("click", () => { if (ui === null && started) openInventory(); });
-  sanitizeCoast(W); initX(); initLayout(); mpInit();
+  sanitizeCoast(W); initX(); initLayout(); mpInit(); worldsInit(); farm2Init(); mineInit(); questInit();
   requestAnimationFrame(loop);
 }
 init();
