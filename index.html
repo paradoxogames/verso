@@ -12353,6 +12353,120 @@ function zScenes(Wd, z, G) {
   return made;
 }
 
+// pv96 — o mar vivo: boias que marcam cada faixa, naufrágios com tesouro, recifes de coral, farol e aviso de profundidade
+Object.assign(X, { wrecks: X.wrecks || {} });
+FLATOBS.buoy = 1; FLATOBS.wreck = 1; FLATOBS.seacoral = 1;
+NEWOBS.buoy = (g, o, sx, sy) => { const t = Date.now() / 700, bob = Math.sin(t + o.x) * 2, c = o.c || "#3fcf6a"; g.fillStyle = "rgba(0,0,0,.18)"; g.beginPath(); g.ellipse(sx + 16, sy + 40, 14, 4, 0, 0, 6.283); g.fill(); g.fillStyle = c; g.beginPath(); g.moveTo(sx + 6, sy + 36 + bob); g.lineTo(sx + 10, sy + 14 + bob); g.lineTo(sx + 22, sy + 14 + bob); g.lineTo(sx + 26, sy + 36 + bob); g.fill(); g.fillStyle = "#f2ead8"; g.fillRect(sx + 8, sy + 24 + bob, 16, 5); g.fillStyle = "#3a3a44"; g.fillRect(sx + 15, sy + 4 + bob, 2, 12); g.fillStyle = Math.sin(t * 3) > 0 ? "#fff6a0" : c; g.beginPath(); g.arc(sx + 16, sy + 3 + bob, 3.5, 0, 6.283); g.fill(); g.fillStyle = "rgba(255,255,255,.18)"; g.beginPath(); g.ellipse(sx + 16, sy + 37 + bob, 14, 4, 0, 0, 6.283); g.fill(); };
+NEWOBS.wreck = (g, o, sx, sy) => { const w = o.w, h = o.h; g.save(); g.fillStyle = "rgba(0,10,30,.35)"; g.beginPath(); g.ellipse(sx + w / 2, sy + h - 8, w / 2, 14, 0, 0, 6.283); g.fill(); g.translate(sx + w / 2, sy + h / 2); g.rotate(-.2); g.fillStyle = "#4a3322"; g.beginPath(); g.moveTo(-w / 2, 0); g.quadraticCurveTo(0, h / 2, w / 2, -4); g.lineTo(w / 2 - 8, -18); g.lineTo(-w / 2 + 8, -14); g.fill(); g.fillStyle = "#6a4a30"; for (let i = 0; i < 6; i++) g.fillRect(-w / 2 + 14 + i * (w - 40) / 5, -14, 5, 24); g.fillStyle = "#3a2a1c"; g.fillRect(-4, -h / 2 - 8, 6, h / 2 + 4); g.fillStyle = "rgba(230,220,196,.55)"; g.beginPath(); g.moveTo(2, -h / 2 - 4); g.lineTo(34, -h / 4); g.lineTo(2, -h / 4); g.fill(); g.restore(); if (!X.wrecks[o.wid]) { g.fillStyle = "rgba(255,225,120," + (.5 + .4 * Math.sin(Date.now() / 300)) + ")"; g.font = "bold 14px system-ui"; g.textAlign = "center"; g.fillText("✦", sx + w / 2, sy + 8 + Math.sin(Date.now() / 400) * 3); g.textAlign = "left"; } };
+NEWOBS.seacoral = (g, o, sx, sy) => { const cols = ["#e86a8a", "#e8a24b", "#a070e0", "#4bc9c0"]; for (let i = 0; i < 7; i++) { const x = sx + 8 + i * (o.w - 16) / 6, hh = 14 + ((i * 7 + o.x) % 5) * 5; g.strokeStyle = cols[(i + ((o.x / 50) | 0)) % 4]; g.lineWidth = 4; g.lineCap = "round"; g.beginPath(); g.moveTo(x, sy + o.h); g.lineTo(x + Math.sin(Date.now() / 900 + i) * 2, sy + o.h - hh); g.stroke(); g.beginPath(); g.moveTo(x, sy + o.h - hh * .6); g.lineTo(x + 7, sy + o.h - hh * .9); g.stroke(); } };
+function zSeaBuild(Wd) {
+  if (Wd._seaDone) return; Wd._seaDone = 1; const step = 150; let nb = 0, nw = 0, nc = 0; const spots = [];
+  for (let y = 300; y < SEA_H - 200; y += step) for (let x = 200; x < WORLD_W - 200; x += step) {
+    let b; try { b = biomeAt(x, y); } catch (e) { continue; } if (b !== "ocean") continue; const d = oceanDepth(x, y), jx = _vh(x, y) * 40;
+    if (Math.abs(d - SEA_SHALLOW) < 38 && ((x / step) | 0) % 4 === 0) { Wd.obs.push({ x: x + jx, y, w: 32, h: 44, type: "buoy", c: "#f0c23a", nosolid: true }); nb++; }
+    else if (Math.abs(d - SEA_DEEP) < 38 && ((x / step) | 0) % 3 === 0) { Wd.obs.push({ x: x + jx, y, w: 32, h: 44, type: "buoy", c: "#e04a4a", nosolid: true }); nb++; }
+    else if (d > 60 && d < SEA_SHALLOW - 60 && _vh(x * 2, y * 3) > .93) { Wd.obs.push({ x, y, w: 90, h: 50, type: "seacoral", nosolid: true }); nc++; }
+    if (d > SEA_SHALLOW + 120 && d < SEA_DEEP - 120) spots.push([x, y]);
+  }
+  // naufrágios na faixa média, bem espaçados
+  const picks = []; for (let i = 0; i < 400 && picks.length < 5; i++) { const s = spots[(_vh(i, 9) * spots.length) | 0]; if (s && picks.every((p) => Math.hypot(p[0] - s[0], p[1] - s[1]) > 900)) picks.push(s); }
+  picks.forEach((s, i) => { Wd.obs.push({ x: s[0] - 80, y: s[1] - 40, w: 160, h: 90, type: "wreck", wid: "w" + i, nosolid: true }); nw++; });
+  window.__seaStats = { buoys: nb, wrecks: nw, coral: nc };
+}
+{ const sw1 = spawnWorldEnemies; spawnWorldEnemies = function () { sw1(); try { zSeaBuild(W); } catch (e) { console.error("sea", e); } }; }
+// tesouro dos naufrágios + aviso de faixa
+let _sbL = "", _wkCd = 0;
+setInterval(() => {
+  try {
+    if (typeof scene === "undefined" || scene !== "world" || ZCUR) { return; } if (!P) return;
+    if (biomeAt(P.x, P.y) !== "ocean") { _sbL = ""; return; }
+    const d = oceanDepth(P.x, P.y), b = d > SEA_DEEP ? "deep" : d > SEA_SHALLOW ? "mid" : "shallow";
+    if (b !== _sbL) { _sbL = b; toast(b === "shallow" ? "🟢 Águas rasas — dá para nadar e explorar" : b === "mid" ? "🟡 Mar médio — procure naufrágios e a descida para Atlântida" : "🔴 Mar profundo — só de barco (fale com o barqueiro nas Docas)", 3800); }
+    W.obs.forEach((o) => { if (o.type !== "wreck" || X.wrecks[o.wid]) return; if (Math.hypot(P.x - (o.x + o.w / 2), P.y - (o.y + o.h / 2)) < 90) { if ((P.dz || 0) < 14 && !X.testMode) { if (Date.now() > (window.__wrH || 0)) { window.__wrH = Date.now() + 6000; toast('⚓ Um naufrágio no fundo! Mergulhe (Z / botão ⬇️) para explorar.', 2600); } return; } X.wrecks[o.wid] = 1; const g = 120 + ((Math.random() * 120) | 0); gold += g; const items = ["perola", "coral", "alga"]; try { radd(items[(Math.random() * 3) | 0], 2); } catch (e) { } toast("⚓ Naufrágio explorado! +" + g + " 🪙 e tesouros do fundo (" + Object.keys(X.wrecks).length + "/5)", 5200); } });
+  } catch (e) { }
+}, 400);
+{ const _fi9 = setInterval(() => { if (window.PV) { Object.assign(window.PV, { seaStats: () => window.__seaStats }); clearInterval(_fi9); } }, 300); }
+
+// pv97 — profundidade real: segure Z para descer e X para subir. Três camadas (Fótica, Crepuscular, Abissal), pressão, escuridão, pérolas abissais e naufrágios no fundo.
+Object.assign(X, { orbs: X.orbs || {} });
+const DZ_MAX = 120, DZ_Z = [{ n: "Zona Fótica", a: 0, b: 30, c: "#4bd0e0" }, { n: "Zona Crepuscular", a: 30, b: 70, c: "#4b7be0" }, { n: "Zona Abissal", a: 70, b: 120, c: "#9a4be0" }];
+const _dzK = { z: 0, x: 0 };
+window.addEventListener("keydown", (e) => { if (e.code === "KeyZ") _dzK.z = 1; if (e.code === "KeyX") _dzK.x = 1; });
+window.addEventListener("keyup", (e) => { if (e.code === "KeyZ") _dzK.z = 0; if (e.code === "KeyX") _dzK.x = 0; });
+function dzSafe() { return 30 + (P.gear && P.gear.tank ? 12 : 0) + (X.suit && X.suit.o2 ? 30 : 0) + Math.max(0, (X.boatLv || 1) - 1) * 10 + (X.testMode ? 200 : 0); }
+function dzFloor(x, y) { const d = oceanDepth(x, y); if (d <= SEA_SHALLOW) return 6 + 24 * Math.min(1, Math.max(0, d) / SEA_SHALLOW); if (d <= SEA_DEEP) return 30 + 40 * (d - SEA_SHALLOW) / (SEA_DEEP - SEA_SHALLOW); return Math.min(DZ_MAX, 70 + 50 * Math.min(1, (d - SEA_DEEP) / 260)); }
+function dzZone(dz) { return dz >= 70 ? 2 : dz >= 30 ? 1 : 0; }
+function dzCan() { return typeof scene !== "undefined" && scene === "world" && !ZCUR && P.swim && !X.boatOn && (canDive() || X.testMode); }
+let _dzHint = 0, _dzPT = 0, _dzZl = -1, _dzLast = Date.now();
+setInterval(() => {
+  try {
+    const now = Date.now(), dt = Math.min(.25, (now - _dzLast) / 1000); _dzLast = now; if (P.dz == null) P.dz = 0;
+    if (!dzCan()) { P.dz = Math.max(0, P.dz - dt * 40); if (P.dz < .5) P.dz = 0; _dzZl = -1; return; }
+    if (!_dzHint) { _dzHint = 1; toast(LAY.touch ? "🤿 Use os botões ⬇️ DESCER e ⬆️ SUBIR. Quanto mais fundo, mais rápido acaba o ar." : "🤿 Segure Z para descer e X para subir. Quanto mais fundo, mais rápido acaba o ar.", 5200); }
+    const fl = dzFloor(P.x, P.y); P.dz += ((_dzK.z ? 1 : 0) - (_dzK.x ? 1 : 0)) * dt * 14; if (P.dz > fl) P.dz = Math.max(Math.min(P.dz, fl), P.dz - dt * 20); P.dz = Math.max(0, Math.min(DZ_MAX, P.dz));
+    const z = dzZone(P.dz); if (z !== _dzZl) { _dzZl = z; if (P.dz > 1) toast(["🟢 Zona Fótica — a luz do sol ainda alcança", "🔵 Zona Crepuscular — escuro, procure Atlântida e naufrágios", "🟣 Zona Abissal — pressão enorme, só com equipamento reforçado"][z], 4200); }
+    if (P.dz > 3) P.o2 -= dt * (P.dz / 30) * .6; // dreno extra: 60m = +120%
+    if (P.dz > dzSafe() && now > _dzPT) { _dzPT = now + 1400; hurt(4 + ((P.dz - dzSafe()) / 8) | 0, { env: true }); toast("⚠️ Pressão! Seu limite é " + (dzSafe() | 0) + "m — suba (X) ou melhore o traje e o barco.", 1500); }
+    if (P.dz >= 38 && P.dz <= 62) { try { const m = AQ && AQ.mp; if (m && Math.hypot(P.x - m.x, P.y - m.y) < 300 && now > (window.__atlH || 0)) { window.__atlH = now + 15000; toast("🔱 Luzes douradas lá embaixo... a entrada de Atlântida está perto!", 3500); } } catch (e) { } }
+    // pérolas abissais: orbes luminosos fixos na Crepuscular/Abissal
+    if (P.dz >= 28) { const gx = Math.floor(P.x / 300), gy = Math.floor(P.y / 300); for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const id = (gx + i) + "_" + (gy + j); if (X.orbs[id] || _vh(gx + i, (gy + j) * 7 + 3) < .62) continue; const ox = (gx + i) * 300 + 40 + _vh(gx + i, gy + j) * 220, oy = (gy + j) * 300 + 40 + _vh(gy + j, gx + i) * 220; if (biomeAt(ox, oy) !== "ocean") continue; const od = dzFloor(ox, oy); if (od < 34) continue; if (Math.hypot(P.x - ox, P.y - oy) < 46 && Math.abs(P.dz - Math.min(od - 4, 30 + _vh(i + gx, j + gy) * 70)) < 22) { X.orbs[id] = 1; const deep = od > 70; try { radd("perola", deep ? 2 : 1); } catch (e) { } gold += deep ? 90 : 40; toast("✨ Pérola abissal coletada (" + Object.keys(X.orbs).length + ")" + (deep ? " — rara!" : ""), 3200); } } }
+  } catch (e) { }
+}, 100);
+function dzOrbs(g) { // desenha os orbes visíveis
+  if (P.dz < 24) return; const t = Date.now() / 600, gx = Math.floor(P.x / 300), gy = Math.floor(P.y / 300);
+  for (let j = -2; j <= 2; j++) for (let i = -3; i <= 3; i++) { const id = (gx + i) + "_" + (gy + j); if (X.orbs[id] || _vh(gx + i, (gy + j) * 7 + 3) < .62) continue; const ox = (gx + i) * 300 + 40 + _vh(gx + i, gy + j) * 220, oy = (gy + j) * 300 + 40 + _vh(gy + j, gx + i) * 220; const sx = ox - camera.x, sy = oy - camera.y + Math.sin(t + ox) * 4; if (sx < -30 || sx > VIEW_W + 30 || sy < -30 || sy > VIEW_H + 30) continue; if (biomeAt(ox, oy) !== "ocean" || dzFloor(ox, oy) < 34) continue; const gr = g.createRadialGradient(sx, sy, 1, sx, sy, 26); gr.addColorStop(0, "rgba(255,255,255,.95)"); gr.addColorStop(.3, "rgba(150,230,255,.6)"); gr.addColorStop(1, "rgba(80,140,255,0)"); g.fillStyle = gr; g.fillRect(sx - 26, sy - 26, 52, 52); }
+}
+{ const rw9 = renderWorld; renderWorld = function () {
+  rw9(); try {
+    if (!(P.dz > .5) || scene !== "world") return; const g = ctx, dz = P.dz, a = Math.min(.82, dz / 85), px = P.x - camera.x, py = P.y - camera.y - 10;
+    g.save(); g.fillStyle = "rgba(2,14,44," + (a * .75) + ")"; g.fillRect(0, 0, VIEW_W, VIEW_H);
+    if (dz > 24) { const R = Math.max(90, 300 - dz * 2.2), gr = g.createRadialGradient(px, py, R * .15, px, py, R * 1.6); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(.55, "rgba(1,6,22," + Math.min(.6, a * .8) + ")"); gr.addColorStop(1, "rgba(0,2,10," + Math.min(.94, a + .15) + ")"); g.fillStyle = gr; g.fillRect(0, 0, VIEW_W, VIEW_H); }
+    g.restore(); g.save(); dzOrbs(g); const t = Date.now() / 1000; g.fillStyle = "rgba(200,230,255,.35)"; for (let i = 0; i < 40; i++) { const x = (_vh(i, 1) * VIEW_W * 1.2 + t * 6 * (1 + i % 3) - camera.x * .3) % VIEW_W, y = (_vh(2, i) * VIEW_H + t * 9 + i * 13) % VIEW_H; g.fillRect((x + VIEW_W) % VIEW_W, y, 2, 2); } g.restore();
+    // medidor de profundidade
+    const T = LAY.touch, bx = 16, by = T ? 204 : 190, bh = T ? 70 : 170, zi = dzZone(dz); g.save(); g.fillStyle = "rgba(4,16,36,.75)"; g.fillRect(bx - 4, by - 22, 62, bh + 44); g.strokeStyle = "rgba(160,200,230,.5)"; g.strokeRect(bx - 4, by - 22, 62, bh + 44);
+    DZ_Z.forEach((q, i) => { g.fillStyle = q.c; g.globalAlpha = i === zi ? .9 : .35; g.fillRect(bx + 6, by + q.a / DZ_MAX * bh, 10, (q.b - q.a) / DZ_MAX * bh); }); g.globalAlpha = 1;
+    const sy = by + Math.min(dzSafe(), DZ_MAX) / DZ_MAX * bh; g.fillStyle = "#ff5a5a"; g.fillRect(bx + 2, sy, 18, 2); g.fillStyle = "#fff"; g.beginPath(); g.moveTo(bx + 18, by + dz / DZ_MAX * bh); g.lineTo(bx + 26, by + dz / DZ_MAX * bh - 5); g.lineTo(bx + 26, by + dz / DZ_MAX * bh + 5); g.fill(); g.font = "bold 12px system-ui"; g.textAlign = "center"; g.fillText((dz | 0) + "m", bx + 13, by - 8); g.font = "10px system-ui"; g.fillStyle = "#ffb0b0"; g.fillText("limite", bx + 13, by + bh + 14); g.textAlign = "left"; g.fillStyle = DZ_Z[zi].c; g.font = "bold 11px system-ui"; g.fillText(["Fótica", "Crepusc.", "Abissal"][zi], bx + 38, by + dz / DZ_MAX * bh + 4); g.restore();
+  } catch (e) { }
+}; }
+// naufrágios só no fundo
+{ const _t = setInterval(() => { if (window.PV) { Object.assign(window.PV, { dzInfo: () => ({ dz: P.dz, safe: dzSafe(), floor: dzFloor(P.x, P.y) }) }); clearInterval(_t); } }, 300); }
+
+// pv98 — celular na horizontal: botões de mergulho, caixa de missão fora do joystick, alvos de toque maiores e telas novas ajustadas
+(function () {
+  const st = document.createElement("style"); st.textContent = `
+body.touch:not(.portrait) #questBox{left:var(--qx,150px)!important;bottom:6px!important;max-width:var(--qw,300px)!important;font-size:10px!important;line-height:1.25;padding:3px 6px!important;opacity:.92}
+.tb.dv{display:none;background:radial-gradient(circle at 35% 30%,rgba(60,140,190,.95),rgba(16,52,92,.95));border-color:rgba(170,225,255,.85)}
+body.diving .tb.dv{display:block}
+body.touch .ovBtn,body.touch .panel button,body.touch #tmenu button{min-height:34px}
+body.touch #v7btn,body.touch .v7btn{min-width:44px;min-height:40px}
+body.touch .overlay button:not(.tb){min-height:40px}
+@media (pointer:coarse) and (max-height:430px){html{--ovz:1.15!important}#ov-x{padding:6px 10px!important}#xTitle{font-size:15px!important;margin:0 0 2px!important}.xtabs{margin:2px 0 4px!important}.xtabs button{padding:5px 11px!important;font-size:12px!important}#xClose{margin-top:4px!important;padding:6px 16px!important}.ovBox,.panel{max-height:94vh;overflow:auto;-webkit-overflow-scrolling:touch}}
+`; document.head.appendChild(st);
+  function build() { const tc = document.getElementById("tc"); if (!tc || document.getElementById("tbDn")) return; const mk = (id, ic, tx, k) => { const b = document.createElement("button"); b.className = "tb dv"; b.id = id; b.innerHTML = ic + "<small>" + tx + "</small>"; const on = (e) => { e.preventDefault(); _dzK[k] = 1; b.classList.add("dn"); try { b.setPointerCapture(e.pointerId); } catch (x) { } }, off = (e) => { e.preventDefault(); _dzK[k] = 0; b.classList.remove("dn"); }; b.addEventListener("pointerdown", on); b.addEventListener("pointerup", off); b.addEventListener("pointercancel", off); b.addEventListener("lostpointercapture", off); tc.appendChild(b); }; mk("tbDn", "⬇️", "DESCER", "z"); mk("tbUp", "⬆️", "SUBIR", "x"); try { layout(); } catch (e) { } }
+  const _pb = placeButtons; placeButtons = function (vw, vh, bs, portrait) {
+    _pb(vw, vh, bs, portrait); build();
+    const R = Math.round(vw * .04 + 6), B0 = portrait ? Math.round(vh * .06) : 14, Cr = R + bs * 1.025, Cb = B0 + bs * .825;
+    const put = (id, dx, dy, size) => { const e = document.getElementById(id); if (!e) return; e.style.width = e.style.height = Math.round(size) + "px"; e.style.right = Math.round(Cr + dx * bs - size / 2) + "px"; e.style.bottom = Math.round(Cb + dy * bs - size / 2) + "px"; };
+    put("tbUp", 1.05, 3.05, bs * .95); put("tbDn", 2.2, 3.05, bs * .95);
+    // evita HABIL x AGIR encostados
+    const it = document.getElementById("tbInt"); if (it) it.style.right = Math.round(Cr + .02 * bs - bs / 2) + "px";
+    if (!portrait) { const joyR = Math.round(vw * .04 + 6) + parseInt(getComputedStyle(document.documentElement).getPropertyValue("--js") || 130), cat = document.getElementById("tbCat"), cl = cat ? vw - parseInt(cat.style.right || 0) - parseInt(cat.style.width || bs) : vw * .6, k = (LAY && LAY.k) || 1, ox = (LAY && LAY.ox) || 0; const qx = Math.max(6, (joyR + 8 - ox) / k), qw = Math.max(140, (cl - joyR - 24) / k); document.documentElement.style.setProperty("--qx", Math.round(qx) + "px"); document.documentElement.style.setProperty("--qw", Math.round(qw) + "px"); }
+  };
+  setInterval(() => { try { document.body.classList.toggle("diving", !!(LAY.touch && typeof dzCan === "function" && dzCan())); } catch (e) { } }, 300);
+})();
+// ---- telas sem teclado: botão ✕ nos menus e textos de tecla trocados por botões ----
+(function () {
+  const _oo = ovOpen;
+  ovOpen = function (id, b, w) {
+    const r = _oo(id, b, w); if (!LAY.touch) return r;
+    const add = () => { const box = r.el.firstElementChild; if (!box) return; if (!box.querySelector(".xcl")) { const x = document.createElement("button"); x.className = "xcl"; x.textContent = "✕ Fechar"; x.style.cssText = "position:sticky;top:0;float:right;z-index:3;margin:0 0 4px 8px;padding:8px 14px;font-size:14px;font-weight:700;border-radius:10px;background:#7a2a2a;color:#fff;border:1px solid #d88"; x.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); r.close(); }); box.prepend(x); } box.querySelectorAll("div").forEach((d) => { if (d.children.length === 0 && /Esc para fechar|Esc fecha/.test(d.textContent)) d.textContent = d.textContent.replace(/·?\s*Esc (para )?fecha(r)?/, "toque em ✕ para fechar"); }); };
+    add(); try { new MutationObserver(add).observe(r.el, { childList: true, subtree: false }); } catch (e) { } return r;
+  };
+  const fix = (el) => { if (!el || !LAY.touch) return; const t = el.textContent; if (/\[F\]|\bF\b para|Esc\b/.test(t) && !el._fx) { el._fx = 1; const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); const ns = []; while (w.nextNode()) ns.push(w.currentNode); ns.forEach((n) => { const v = n.nodeValue.replace(/\[F\]/g, "[AGIR]").replace(/\bpressione F\b/gi, "toque em AGIR"); if (v !== n.nodeValue) n.nodeValue = v; }); el._fx = 0; } };
+  const go = () => { ["hint", "toast"].forEach((id) => { const e = document.getElementById(id); if (e && !e._ob) { e._ob = 1; new MutationObserver(() => fix(e)).observe(e, { childList: true, characterData: true, subtree: true }); } }); };
+  setInterval(go, 1500);
+})();
+
 let last = performance.now();
 function loopCore(now) {
   const dt = Math.min((now - last) / 1000, 0.05); last = now;
